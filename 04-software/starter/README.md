@@ -34,7 +34,7 @@ When implementation begins, record the exact board, firmware, OS, libraries and 
 
 ## Working with Git
 
-Review `git diff` before committing. Git author identity must be set by the contributor if none is configured. No remote is configured; publishing or selecting a host is a later decision.
+Review `git diff` before committing. Git author identity must be set by the contributor if none is configured. The enclosing workspace is connected to the private `colt11044/code-metal-hackathon` repository; this subtree does not have a separate remote.
 
 The starter-local `.gitignore` excludes common credentials, virtual environments, build outputs and generated observations within this subtree; it does not cover unrelated files elsewhere in the workspace. It cannot identify every secret: inspect staged changes before committing. An intentionally named `.env.example` may contain placeholders only.
 
