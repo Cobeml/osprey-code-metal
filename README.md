@@ -1,12 +1,12 @@
 # Team 29 — Open-ocean man-overboard response
 
-Help a ship and rescue boat maintain a useful picture of a person in the water through intermittent drone observations and communications.
+Help a search-and-rescue coordinator direct the ship using evidence about a person in the water through intermittent drone observations and communications.
 
-**Status — requirements discovery, November 7, 2026.** This repository contains the team's current planning foundation. Application code, hardware integration and measured performance are pending. The PRD interview continues one question at a time.
+**Status — core scope consolidated, November 7, 2026.** The PRD records the accepted interview decisions, provisional performance targets and hardware gates. Runtime implementation, integration and measured results are pending.
 
 ## Start here
 
-1. [Draft PRD](docs/product/prd.md) — problem, scope, proposed requirements and unresolved decisions.
+1. [PRD](docs/product/prd.md) — accepted scope, requirements, decision register and remaining hardware gates.
 2. [System architecture](docs/engineering/architecture.md) — edge processing, communications and operator responsibilities.
 3. [Hardware and integrations](docs/engineering/hardware.md) — promised equipment, checkout dependencies and interface checks.
 4. [Software and public repositories](docs/engineering/software.md) — reusable components and selection constraints.
@@ -30,16 +30,18 @@ CONTRIBUTING.md   Team workflow and implementation gates
 LICENSE          Apache-2.0 repository license
 ```
 
-Use one repository and a small number of processes. Create implementation modules as their responsibilities become concrete. Runtime code belongs in src, repeatable checks in tests, and test inputs in fixtures. Source packages, execution commands and CI will be selected with the implementation stack.
+Use one repository and a small number of processes. Create implementation modules as their responsibilities become concrete. Runtime code belongs in src, repeatable checks in tests, and test inputs in fixtures. Use the accepted Python backend and browser display stack. One person uses Claude or Codex for implementation and integration. Select device adapters after checkout and follow the build sequence in the software document.
 
-## Scenario and current proposal
+## Accepted demo
 
-A crew member declares man overboard in open ocean. A camera node acquires a candidate, tracks observations and reports evidence to the ship. The operator view distinguishes a fresh sighting, reported visual loss, and a stale communications link. It preserves the last observation and presents a separately identified estimate when evidence ages.
+MOB declaration starts candidate detection on two live sensor nodes. The coordinator confirms one person, then tracking and following begin. One node is an airborne drone and the other a live camera proxy for a second drone. Use autonomous fixed-camera following where supported and label pilot assistance otherwise.
 
-The manual trigger and maritime mission come from the team discussions. One drone, three-second updates, live-versus-replay scope, GNSS assumptions and the primary operator remain proposed or unresolved. Consult the PRD before treating these as requirements.
+Process video on the ground. Show both feeds and independent per-node state. Retain screen grabs, person locations and observation age through visual loss or coordinator-link loss. Use the inclusive 50 m association rules in the PRD.
 
-The organizer briefing records **November 8, 2026 at noon EST** as the submission cutoff. See [event constraints](docs/product/event-constraints.md).
+Demonstrate a five-second processor-to-display outage with a provisional three-second recovery target. Separately hide the person and show a labeled accelerated ocean drift simulation after both sightings exceed six real seconds in age. Preloaded wind/current data and clearly labeled simulated person coordinates are accepted. Live detection takes place at the venue.
+
+Read the [ordered build sequence](docs/engineering/software.md#ordered-build-sequence) and [acceptance checklist](docs/engineering/verification.md#acceptance-checklist). The organizer cutoff is **November 8, 2026 at noon EST**. See [event constraints](docs/product/event-constraints.md).
 
 ## Evidence and licensing
 
-Label each result as live hardware, replay or simulation. Source availability does not establish device compatibility or field performance. Third-party code, model weights and datasets retain their own licenses. Record chosen versions and terms before incorporating them.
+Label live detections, simulated coordinates, drift estimates and pilot assistance explicitly. The accepted demonstration uses live video. Source availability does not establish device compatibility or field performance. Third-party code, model weights and datasets retain their own licenses. Record chosen versions and terms before incorporating them.

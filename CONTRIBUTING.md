@@ -2,9 +2,9 @@
 
 ## Coordinate before implementation
 
-The [PRD](docs/product/prd.md) holds the current product requirements and decision status. Meeting notes record discussion. Engineering documents hold proposed boundaries and interfaces. A change in one should update the affected others in the same commit.
+The [PRD](docs/product/prd.md) holds the current product requirements and decision status. Meeting notes record discussion. Engineering documents hold the implementation baseline, design recommendations and hardware gates. A change in one should update the affected others in the same commit.
 
-Use the ongoing one-question-at-a-time interview to resolve product choices. Record accepted answers in the PRD decision table with date and rationale. Assign one owner to each implementation task and one integration owner once the team confirms roles.
+Core scope is consolidated. One person uses Claude or Codex for implementation and integration. Record that owner and the flight operator before hardware testing. Resolve material scope changes with the user and record accepted decisions in the PRD.
 
 ## Development workflow
 
@@ -15,7 +15,7 @@ Use the ongoing one-question-at-a-time interview to resolve product choices. Rec
 5. Open a pull request with behavior, evidence, assumptions and known failures.
 6. Integrate regularly and rehearse from a clean checkout.
 
-Keep execution reproducible. When the stack is selected, commit the dependency manifest and lockfile, document exact setup/run/test commands here, and add CI for checks that actually run. Capture the Python/runtime, OS, CPU architecture, accelerator firmware/runtime and model version used in a hardware result.
+Keep execution reproducible. For the accepted Python/backend and browser/display stack, commit the dependency manifest and lockfile, document exact setup/run/test commands here, and add CI for checks that actually run. Capture the Python/runtime, OS, CPU architecture, accelerator firmware/runtime and model version used in a hardware result.
 
 ## Boundaries and data
 
