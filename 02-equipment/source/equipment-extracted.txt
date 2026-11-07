@@ -1,0 +1,78 @@
+## Page 1
+
+Hardware  Available  at  the  Hackathon  
+We'll  be  stocked  with  computing  platforms,  sensors,  radios,  robotics,  and  electronics  
+equipment
+ 
+to
+ 
+support
+ 
+rapid
+ 
+prototyping
+ 
+of
+ 
+search-and-rescue
+ 
+solutions.
+ 
+Baseline  Kit  (Every  Team)  
+Each  team  will  have  access  to:  
+●
+ 
+Raspberry  Pi  5  (16  GB)  with  26  TOPS  AI  accelerator,  storage,  and  power  supply  
+●
+ 
+Arduino-compatible  microcontroller  with  Grove  expansion  shield  
+●
+ 
+Grove  40-in-1  sensor  and  actuator  kit  with  a  variety  of  plug-and-play  modules  
+●
+ 
+Development  accessories  for  connecting  sensors,  prototyping  circuits,  and  
+interfacing
+ 
+with
+ 
+hardware
+ 
+Shared  Hardware  Library  
+Additional  hardware  will  be  available  for  teams  to  check  out  and  share,  including:  
+Category  Hardware  
+Additional  Compute  
+Raspberry  Pi  Zero,  ESP32,  Arduino,  NVIDIA  Jetson,  and  other  embedded  development  boards  
+Cameras  &  Vision  
+Standard,  wide-angle,  low-light/NoIR,  AI-enabled,  and  depth  cameras  
+Thermal  &  Infrared  Thermal  imaging  cameras  and  infrared  sensors  
+LiDAR  &  Distance  Sensing  
+2D/3D  LiDAR,  time-of-flight  sensors,  ultrasonic  rangefinders  
+GPS  &  Localization  
+GPS/GNSS  receivers,  positioning  modules,  inertial  sensors  (IMUs),  accelerometers,  gyroscopes,  magnetometers  
+RF  &  Wireless  Communications  
+Software-defined  radios  (SDRs),  Wi-Fi  adapters,  Bluetooth,  LoRa,  UWB  ranging,  and  other  wireless  modules  
+Radar  &  Motion  Detection  
+mmWave  radar,  Doppler  radar,  PIR  motion  sensors  
+Environmental  Sensing  
+Temperature,  humidity,  pressure,  gas,  air-quality,  light,  and  other  environmental  sensors  
+
+## Page 2
+
+Audio  &  Acoustic  Sensing  
+Microphones,  speakers,  acoustic  sensors,  and  audio  processing  modules  
+Ground  Robotics  
+Wheeled,  tracked,  and  legged  robots,  robotic  arms,  and  mobile  robotics  development  kits  
+Aerial  Robotics  
+Programmable  microdrones,  FPV  drones,  and  drone  development  platforms  
+Motors  &  Actuators  
+DC  motors,  servos,  motor  controllers,  pan-tilt  mechanisms,  and  other  actuators  
+Electronics  &  Prototyping  
+Breadboards,  jumper  wires,  connectors,  resistors,  LEDs,  switches,  and  other  components  
+Test  &  Debug  Equipment  
+Multimeters,  oscilloscopes,  logic  analyzers,  USB  serial  adapters,  and  bench  power  supplies  
+Fabrication  &  Assembly  
+Soldering  stations,  solder,  wire,  heat-shrink  tubing,  crimping  tools,  hand  tools,  and  assembly  supplies  
+Displays  &  Accessories  
+Portable  monitors,  USB  hubs,  power  supplies,  batteries,  cables,  and  adapters  
+ 
