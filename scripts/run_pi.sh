@@ -6,12 +6,13 @@ mkdir -p runtime
 PIDFILE=runtime/osprey.pid
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
 stop() {
-  if running; then kill "$(cat "$PIDFILE")"; for _ in $(seq 20); do running || break; sleep 0.25; done; fi
-  pkill -f 'uvicorn osprey.app' 2>/dev/null; rm -f "$PIDFILE"
+  if running; then kill "$(cat "$PIDFILE")"; for _ in $(seq 12); do running || break; sleep 0.25; done; fi
+  pkill -9 -f 'uvicorn osprey.app' 2>/dev/null; pkill -9 -f aurora_bridge 2>/dev/null; rm -f "$PIDFILE"
+  sleep 0.3
 }
 start() {
   running && { echo "already running (pid $(cat $PIDFILE))"; return; }
-  nohup .venv/bin/uvicorn osprey.app:app --host 0.0.0.0 --port 8000 --log-level warning \
+  nohup .venv/bin/uvicorn osprey.app:app --host 0.0.0.0 --port 8000 --log-level warning --loop asyncio \
     >> runtime/osprey.log 2>&1 &
   echo $! > "$PIDFILE"
   for _ in $(seq 40); do curl -fs localhost:8000/health >/dev/null && { echo "up (pid $(cat $PIDFILE))"; return; }; sleep 0.25; done

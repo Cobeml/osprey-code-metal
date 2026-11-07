@@ -26,6 +26,9 @@ class Settings:
     rail_hysteresis_m: float = 0.15
     rail_frames: int = 3
     cam_height_m: float = 1.1
+    aurora_mode: int = 2
+    aurora_flip: bool = False
+    rail_row_frac: float = 0.0  # where to draw the rail on the real ship-cam video (0 = off)
     cam_fx: float = 424.0
     cam_fy: float = 425.0
     cam_cx: float = 320.0

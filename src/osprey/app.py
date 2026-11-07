@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import math
 import time
@@ -21,12 +22,16 @@ from .drift import DriftEstimator, Forcing
 from .gateway import Gateway
 from .geo import LatLon, ShipPose, latlon_to_enu
 from .incident import IncidentEngine
+from .nodes.aurora import AuroraNode
 from .nodes.sim import SimScout, SimShipCam
+from .perception.detector import make_detector
 from .scenario import Scenario
 from .shipcam import RailTrigger
 from .store import EventStore
 
 log = logging.getLogger("osprey")
+import faulthandler, signal, sys  # noqa: E401,E402
+faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
 
 NODE_LABELS = {
     "ship": "SHIP DECK CAM",
@@ -65,9 +70,22 @@ class Ground:
         self.latest_jpeg: dict[str, bytes] = {}
         self.fps: dict[str, list[float]] = {}
         self.tasks: list[asyncio.Task] = []
+        self.detector = None
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.aurora = AuroraNode(self, settings.aurora_mode, settings.aurora_flip)
+        self.last_ship_dets: list[dict] = []
+        self.calib_path = rt / "calibration.json"
+        if self.calib_path.exists():
+            c = json.loads(self.calib_path.read_text())
+            self.trigger.rail_m = self.s.rail_m = float(c.get("rail_m", self.s.rail_m))
+            self.s.rail_row_frac = float(c.get("rail_row_frac", self.s.rail_row_frac))
 
     # -------------------------------------------------------------- lifecycle
     async def start(self) -> None:
+        self.loop = asyncio.get_running_loop()
+        self.detector = await asyncio.to_thread(make_detector, self.s.detector, self.s.hef_path)
+        log.warning("detector: %s", type(self.detector).__name__ if self.detector else "none")
+        self.tasks.append(asyncio.create_task(self.aurora.run()))
         self.tasks.append(asyncio.create_task(self._state_loop()))
         self.tasks.append(asyncio.create_task(self._sim_loop()))
 
@@ -118,6 +136,7 @@ class Ground:
         events: list[dict] = []
         image_ref = None
         if node_id == "ship":
+            self.last_ship_dets = dets
             trig = self.trigger.update(capture_ts, [(d["track_id"], d.get("z_m"), d.get("x_m", 0.0))
                                                    for d in dets])
             if trig and self.engine.armed:
@@ -232,8 +251,13 @@ class Ground:
         snap["drift"] = self.drift_view
         snap["ship"] = {"lat": self.ship.lat, "lon": self.ship.lon, "heading": self.ship.heading_deg,
                         "label": "simulated ship position"}
-        snap["rail"] = {"rail_m": self.s.rail_m, "armed": self.trigger.armed,
-                        "row": self.sim_ship.row_for_depth(self.s.rail_m) / 400.0}
+        snap["rail"] = {"rail_m": self.trigger.rail_m, "armed": self.trigger.armed,
+                        "row": self.s.rail_row_frac or None,
+                        "persons": [{"track_id": d["track_id"], "z_m": d.get("z_m")}
+                                    for d in self.last_ship_dets]}
+        snap["aurora"] = {"status": self.aurora.status, "restarts": self.aurora.restarts,
+                          **{k: round(v, 1) for k, v in self.aurora.timing.items()}}
+        snap["detector"] = type(self.detector).__name__ if self.detector else "none"
         snap["scenario"] = {"multiplier": self.sclock.multiplier, "hidden": self.scenario.hidden}
         snap["outage"] = max(0.0, self.gateway.outage_until - now)
         return snap
@@ -298,6 +322,15 @@ class Ground:
             self.scenario.hidden = False
             return {"command_id": cmd.command_id, "ok": True,
                     "message": f"person reappears {a.get('dist_m', 30)} m downstream"}
+        if t == "set_rail":
+            if "rail_m" in a:
+                self.trigger.rail_m = self.s.rail_m = float(a["rail_m"])
+            if "rail_row_frac" in a:
+                self.s.rail_row_frac = float(a["rail_row_frac"])
+            self.calib_path.write_text(json.dumps({"rail_m": self.s.rail_m,
+                                                   "rail_row_frac": self.s.rail_row_frac}))
+            return {"command_id": cmd.command_id, "ok": True,
+                    "message": f"rail at {self.s.rail_m:.2f} m (depth)"}
         if t == "demo_source":
             node, src = a.get("node"), a.get("source")
             if node in self.sources and src:
@@ -348,6 +381,25 @@ def api_state():
 @app.post("/api/commands")
 async def api_command(body: dict):
     return await ground.handle_ws_command(body)
+
+
+@app.get("/api/calibration")
+def api_calibration():
+    return {"rail_m": ground.trigger.rail_m, "armed": ground.trigger.armed,
+            "persons": [{"track_id": d["track_id"], "z_m": d.get("z_m"), "x_m": d.get("x_m"),
+                         "bbox": d["bbox"], "confidence": d["confidence"]} for d in ground.last_ship_dets],
+            "depth": ground.aurora.depth_at_center(), "intrinsics": ground.aurora.intrinsics,
+            "aurora": ground.aurora.status, "timing": ground.aurora.timing}
+
+
+@app.get("/api/frame/{node_id}.jpg")
+def api_frame(node_id: str):
+    from fastapi.responses import Response
+
+    jpg = ground.latest_jpeg.get(node_id)
+    if jpg is None:
+        return JSONResponse({"error": "no frame"}, status_code=404)
+    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/history")

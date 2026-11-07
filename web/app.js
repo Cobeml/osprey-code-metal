@@ -293,7 +293,7 @@ function renderFeeds() {
       const fit = fitRect(cv, f.live);
       ctx.drawImage(f.live, fit.x, fit.y, fit.w, fit.h);
       drawBoxes(ctx, fit, f.liveHeader, false);
-      if (node === "ship" && snap && snap.rail && f.liveHeader.source !== "sim") drawRail(ctx, fit);
+      if (node === "ship" && snap && snap.rail && snap.rail.row && f.liveHeader.source !== "sim") drawRail(ctx, fit);
       if (ns && ns.lost && ns.last_accepted) {
         ageText = `visual lost · last seen ${fmtAge(t - ns.last_accepted.capture_ts)} ago`;
         if (f.grab) drawInset(ctx, cv, f.grab, f.grabHeader);

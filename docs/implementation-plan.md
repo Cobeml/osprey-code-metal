@@ -150,9 +150,9 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - Done when: a fully simulated story plays: auto MOB → search area → candidate → confirm → tracking → hide → drift grows → reacquire → end. Commit, and tell the user "sim demo works" (this is the safety net).
 
 ### Phase 3 — Ship deck camera, real (2 h) [Aurora connected; H1 for calibration]
-- [ ] `native/aurora/aurora_bridge.cc`, based on `aurora_probe.cc` (mode 2, 640×400, ~14 fps, aligned, heartbeat on). Each frame goes to stdout as a length-prefixed header JSON + RGB JPEG + depth uint16 (PNG or raw). Recover from device errors by exiting non-zero; Python restarts it.
-- [ ] `perception/detector.py`: Hailo `yolov8s_h8.hef` via `hailo_platform` (check output format with `hailortcli parse-hef`; the model has on-chip NMS). One shared VDevice for all nodes. Benchmark fps.
-- [ ] `perception/tracker.py`, `shipcam.py` trigger and geometry; the rail line drawn on the ship-cam video.
+- [x] `native/aurora/aurora_bridge.cc`, based on `aurora_probe.cc` (mode 2, 640×400, ~14 fps, aligned, heartbeat on). Each frame goes to stdout as a length-prefixed header JSON + RGB JPEG + depth uint16 (PNG or raw). Recover from device errors by exiting non-zero; Python restarts it.
+- [x] `perception/detector.py`: Hailo `yolov8s_h8.hef` via `hailo_platform` (check output format with `hailortcli parse-hef`; the model has on-chip NMS). One shared VDevice for all nodes. Benchmark fps.
+- [x] `perception/tracker.py`, `shipcam.py` trigger and geometry; the rail line drawn on the ship-cam video.
 - [ ] With H1: the user stands on the tape, set `rail_m` from measured depth, walk across, and confirm one MOB per crossing.
 - Done when: walking past the tape on the real camera opens the incident within 2 s, with the trigger frame and overboard point shown. Record trigger latency in `docs/results.md`.
 
