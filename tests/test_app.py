@@ -85,3 +85,13 @@ def test_scout_ws_takes_over_node(client):
         assert st["nodes"]["B"]["source"] == "ws"
         assert st["nodes"]["B"]["session_id"] == "t1"
     cmd(client, "demo_source", node="B", source="sim")
+
+
+def test_tunnel_only_exposes_scout(client):
+    h = {"host": "abc-def.trycloudflare.com"}
+    assert client.get("/scout", headers=h).status_code == 200
+    assert client.get("/", headers=h).status_code == 403
+    assert client.get("/api/state", headers=h).status_code == 403
+    assert client.post("/api/commands", json={"cmd": "manual_mob"}, headers=h).status_code == 403
+    assert client.get("/static/app.js", headers=h).status_code == 403
+    assert client.get("/", headers={"host": "169.254.50.2:8000"}).status_code == 200

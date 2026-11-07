@@ -370,8 +370,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Osprey", lifespan=lifespan)
 
 
+TUNNEL_ALLOWED = ("/scout", "/health")
+
+
+def via_tunnel(headers) -> bool:
+    """Requests that came through the public Cloudflare quick tunnel."""
+    host = headers.get("host", "")
+    return host.endswith(".trycloudflare.com") or "cf-connecting-ip" in headers
+
+
 @app.middleware("http")
 async def no_cache_static(request, call_next):
+    if via_tunnel(request.headers) and request.url.path not in TUNNEL_ALLOWED:
+        return JSONResponse({"error": "not available through the tunnel"}, status_code=403)
     resp = await call_next(request)
     if request.url.path.startswith("/static"):
         resp.headers["Cache-Control"] = "no-store"
@@ -445,6 +456,9 @@ def api_history():
 
 @app.websocket("/ws")
 async def ws_display(ws: WebSocket):
+    if via_tunnel(ws.headers):  # the coordinator display is wired-only
+        await ws.close(code=1008)
+        return
     await ground.gateway.serve(ws)
 
 
