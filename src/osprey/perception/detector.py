@@ -13,6 +13,7 @@ from typing import Optional
 import numpy as np
 
 PERSON = 0
+SPORTS_BALL = 32  # COCO index in the yolov8 80-class output
 
 
 def letterbox(img: np.ndarray, size: int = 640) -> tuple[np.ndarray, float, int, int]:
@@ -38,6 +39,7 @@ class HailoDetector:
         self._pool.submit(self._init, hef_path, score).result()
 
     def _init(self, hef_path: str, score: float) -> None:
+        self.ball_score = 0.30
         from hailo_platform import (HEF, ConfigureParams, FormatType, HailoSchedulingAlgorithm,
                                     HailoStreamInterface, InferVStreams, InputVStreamParams,
                                     OutputVStreamParams, VDevice)
@@ -60,37 +62,38 @@ class HailoDetector:
         self.lock = threading.Lock()
         self.last_ms = 0.0
 
-    def detect_rgb(self, rgb: np.ndarray) -> list[dict]:
-        """rgb: HxWx3 uint8 RGB. Returns [{bbox (normalized x1,y1,x2,y2 of the input image), confidence}]."""
+    def detect_rgb(self, rgb: np.ndarray, classes=(PERSON,)) -> list[dict]:
+        """rgb: HxWx3 uint8 RGB. Returns [{bbox (normalized x1,y1,x2,y2 of the input image),
+        confidence, cls}] for the requested COCO classes."""
         h, w = rgb.shape[:2]
         lb, s, px, py = letterbox(rgb)
         t0 = time.perf_counter()
         out = self._pool.submit(self._infer, lb).result()
         self.last_ms = (time.perf_counter() - t0) * 1000
         dets = []
-        persons = out[0][PERSON]
-        for ymin, xmin, ymax, xmax, sc in np.asarray(persons).reshape(-1, 5):
-            if sc < self.score:
-                continue
-            x1 = (xmin * 640 - px) / s / w
-            x2 = (xmax * 640 - px) / s / w
-            y1 = (ymin * 640 - py) / s / h
-            y2 = (ymax * 640 - py) / s / h
-            dets.append({"bbox": (float(max(0.0, x1)), float(max(0.0, y1)),
-                                  float(min(1.0, x2)), float(min(1.0, y2))),
-                         "confidence": float(sc)})
+        for cls in classes:
+            for ymin, xmin, ymax, xmax, sc in np.asarray(out[0][cls]).reshape(-1, 5):
+                if sc < (self.score if cls == PERSON else self.ball_score):
+                    continue
+                x1 = (xmin * 640 - px) / s / w
+                x2 = (xmax * 640 - px) / s / w
+                y1 = (ymin * 640 - py) / s / h
+                y2 = (ymax * 640 - py) / s / h
+                dets.append({"bbox": (float(max(0.0, x1)), float(max(0.0, y1)),
+                                      float(min(1.0, x2)), float(min(1.0, y2))),
+                             "confidence": float(sc), "cls": "person" if cls == PERSON else "ball"})
         return dets
 
     def _infer(self, lb: np.ndarray):
         return self._pipe.infer({self.in_name: lb[None]})[self.out_name]
 
-    def detect_jpeg(self, jpeg: bytes) -> tuple[list[dict], Optional[np.ndarray]]:
+    def detect_jpeg(self, jpeg: bytes, classes=(PERSON,)) -> tuple[list[dict], Optional[np.ndarray]]:
         import cv2
 
         bgr = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
         if bgr is None:
             return [], None
-        return self.detect_rgb(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)), bgr
+        return self.detect_rgb(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), classes), bgr
 
     def close(self) -> None:
         self._pool.submit(self._close).result()

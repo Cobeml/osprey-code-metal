@@ -95,3 +95,19 @@ def test_tunnel_only_exposes_scout(client):
     assert client.post("/api/commands", json={"cmd": "manual_mob"}, headers=h).status_code == 403
     assert client.get("/static/app.js", headers=h).status_code == 403
     assert client.get("/", headers={"host": "169.254.50.2:8000"}).status_code == 200
+
+
+def test_dispatch_needs_a_confirmed_sighting(client):
+    cmd(client, "end_incident")
+    cmd(client, "manual_mob")
+    a = cmd(client, "dispatch")
+    assert not a["ok"] and "confirm" in a["message"]
+    g = client.ground
+    plan = g.dispatch_plan()
+    assert plan["basis"].startswith("default")
+    g.ship_ball = {"x_m": 1.0, "z_m": 2.0, "ts": time.time(), "source": "aurora"}
+    plan = g.dispatch_plan()
+    assert plan["basis"].startswith("deck-camera")
+    assert plan["heading_deg"] == pytest.approx(26.6, abs=0.1)
+    assert plan["distance_m"] == pytest.approx(2.236 - 0.4, abs=0.01)
+    cmd(client, "end_incident")

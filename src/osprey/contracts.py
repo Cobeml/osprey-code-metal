@@ -74,7 +74,7 @@ class Command(BaseModel):
     command_id: str
     type: Literal[
         "confirm", "reject", "stop_follow", "resume_follow", "end_incident", "manual_mob",
-        "demo_outage", "demo_speed", "demo_inject", "demo_source", "demo_hide", "demo_reset", "demo_start", "set_rail",
+        "demo_outage", "demo_speed", "demo_inject", "demo_source", "demo_hide", "demo_reset", "demo_start", "set_rail", "dispatch",
     ]
     args: dict = Field(default_factory=dict)
 

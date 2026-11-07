@@ -95,12 +95,9 @@ class AuroraNode:
         t0 = time.perf_counter()
         ok, jpg = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_q])
         self.timing["encode_ms"] = (time.perf_counter() - t0) * 1000
-        dets = []
-        det = self.g.detector
-        if det is not None:
-            t0 = time.perf_counter()
-            dets = det.detect_rgb(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
-            self.timing["detect_ms"] = (time.perf_counter() - t0) * 1000
+        t0 = time.perf_counter()
+        dets = self.g.detect("ship", bgr)
+        self.timing["detect_ms"] = (time.perf_counter() - t0) * 1000
         capture_ts = hdr["ts_ms"] / 1000.0
         dets = self.tracker.update(capture_ts, dets)
         for d in dets:

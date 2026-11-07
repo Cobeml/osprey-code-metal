@@ -21,7 +21,7 @@
   <section id="chart-wrap">
     <div id="chart"></div>
     <div id="estimate-label" class="hidden"></div>
-    <div id="chart-note">Ship position simulated · deck-cam geometry real relative · scout coordinates simulated</div>
+    <div id="chart-note">Ship position simulated · deck-cam geometry real relative · drone/rover coordinates simulated (no GPS)</div>
   </section>
   <section id="feeds">
     <div class="tile" data-node="ship"><div class="tile-head"><span class="name">SHIP DECK CAM</span><span class="pill">…</span></div><canvas width="640" height="400"></canvas><div class="age"></div></div>
@@ -33,6 +33,7 @@
   <div id="controls">
     <button id="btn-confirm" class="big green hidden">CONFIRM PERSON</button>
     <button id="btn-reject" class="hidden">Not a person</button>
+    <button id="btn-dispatch" class="big blue hidden">DISPATCH ROVER</button>
     <button id="btn-follow" class="big hidden">STOP FOLLOWING</button>
     <button id="btn-end" class="big hidden">END INCIDENT</button>
     <span id="toast"></span>
@@ -58,11 +59,15 @@
     <button data-cmd="demo_source" data-args='{"node":"ship","source":"sim"}'>ship sim</button>
     <button data-cmd="demo_source" data-args='{"node":"ship","source":"aurora"}'>ship Aurora</button>
   </div>
-  <div class="row">
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"sim"}'>A sim</button>
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"ws"}'>A real</button>
-    <button data-cmd="demo_source" data-args='{"node":"B","source":"sim"}'>B sim</button>
-    <button data-cmd="demo_source" data-args='{"node":"B","source":"ws"}'>B real</button>
+  <div class="row">Drone A:
+    <button data-cmd="demo_source" data-args='{"node":"A","source":"sim"}'>sim</button>
+    <button data-cmd="demo_source" data-args='{"node":"A","source":"usb"}'>USB rx</button>
+    <button data-cmd="demo_source" data-args='{"node":"A","source":"file"}'>recorded</button>
+    <button data-cmd="demo_source" data-args='{"node":"A","source":"ws"}'>phone</button>
+  </div>
+  <div class="row">Rover B:
+    <button data-cmd="demo_source" data-args='{"node":"B","source":"sim"}'>sim</button>
+    <button data-cmd="demo_source" data-args='{"node":"B","source":"ws"}'>TurboPi/phone</button>
   </div>
   <div id="stats"></div>
 </aside>

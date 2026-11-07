@@ -101,6 +101,7 @@ function toast(t) { $("#toast").textContent = t; clearTimeout(toastTimer); toast
 
 $("#btn-confirm").onclick = (e) => { const c = currentCandidate(); if (c) send("confirm", { candidate_id: c.candidate_id }, e.target); };
 $("#btn-reject").onclick = (e) => { const c = currentCandidate(); if (c) send("reject", { candidate_id: c.candidate_id }, e.target); };
+$("#btn-dispatch").onclick = (e) => send("dispatch", {}, e.target);
 $("#btn-follow").onclick = (e) => send(snap && snap.follow_enabled ? "stop_follow" : "resume_follow", {}, e.target);
 $("#btn-end").onclick = (e) => {
   if (Date.now() < endArmedUntil) { endArmedUntil = 0; send("end_incident", {}, e.target); }
@@ -134,7 +135,7 @@ document.querySelectorAll(".tile canvas").forEach((cv) => {
 });
 
 // ------------------------------------------------------------------ timeline
-const TL_TYPES = { mob: "MOB", confirm: "confirmed", associated: "associated", reacquired: "reacquired", lost: "visual lost",
+const TL_TYPES = { dispatch: "rover dispatched", mob: "MOB", confirm: "confirmed", associated: "associated", reacquired: "reacquired", lost: "visual lost",
   input_lost: "video lost", input_restored: "video back", end: "ended", stop_follow: "follow stopped",
   resume_follow: "follow resumed", reject: "rejected", session_restart: "source restart", history: "history" };
 function addTimeline(e, isHistory) {
@@ -254,7 +255,7 @@ function fitRect(cv, img) {
   const s = Math.min(cv.width / iw, cv.height / ih);
   return { x: (cv.width - iw * s) / 2, y: (cv.height - ih * s) / 2, w: iw * s, h: ih * s };
 }
-const BOX_COLORS = { tracking: "#3fb950", candidate: "#ff7b72", detection: "#8b949e", person: "#f2cc60" };
+const BOX_COLORS = { tracking: "#3fb950", candidate: "#ff7b72", detection: "#8b949e", person: "#f2cc60", ball: "#7ee787" };
 
 function drawBoxes(ctx, fit, header, dim) {
   for (const b of header.boxes) {
@@ -266,7 +267,7 @@ function drawBoxes(ctx, fit, header, dim) {
     ctx.strokeRect(fit.x + x1 * fit.w, fit.y + y1 * fit.h, (x2 - x1) * fit.w, (y2 - y1) * fit.h);
     ctx.fillStyle = ctx.strokeStyle;
     ctx.font = "bold 18px sans-serif";
-    const lbl = b.state === "person" ? `person${b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : ""}` : `${b.state} ${Math.round(b.confidence * 100)}%`;
+    const lbl = (b.state === "person" || b.state === "ball") ? `${b.state}${b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : ""}` : `${b.state} ${Math.round(b.confidence * 100)}%`;
     ctx.fillText(lbl, fit.x + x1 * fit.w, Math.max(18, fit.y + y1 * fit.h - 5));
     ctx.globalAlpha = 1;
   }
@@ -281,9 +282,17 @@ function renderFeeds() {
     const videoOk = linkUp && f.live && liveAge < VIDEO_STALE_S;
     let pill = ns ? ns.pill : "NO VIDEO";
     if (!videoOk && pill !== "CONTACT LOST") pill = "NO VIDEO";
-    if (ns) tile.querySelector(".name").textContent = (ns.label || node) + (ns.source === "sim" ? "  [SIM]" : "");
+    const isRover = snap && snap.roles && node === snap.roles.rover;
+    if (isRover && snap.dispatch && ns && !ns.has_target && pill !== "CANDIDATE" && pill !== "NO VIDEO")
+      pill = ({ dispatched: "EN ROUTE", driving: "EN ROUTE", searching: "SEARCHING", approaching: "APPROACHING" })[snap.dispatch.status] || snap.dispatch.status.toUpperCase();
+    if (isRover && snap.dispatch && snap.dispatch.status === "arrived") pill = "ON SCENE";
+    const SRC = { sim: "  [SIM]", file: "  [RECORDED FLIGHT]", usb: "  [LIVE FPV]" };
+    if (ns) tile.querySelector(".name").textContent = (ns.label || node) + (SRC[ns.source] || "");
+    let tg = tile.querySelector(".target");
+    if (!tg) { tg = document.createElement("div"); tg.className = "target"; tile.appendChild(tg); }
+    tg.textContent = ns && ns.target && node !== "ship" ? "target: " + (ns.target === "ball" ? "green ball" : ns.target) : "";
     const pe = tile.querySelector(".pill");
-    pe.textContent = pill + (linkUp ? "" : " · as of link loss");
+    pe.textContent = pill + (linkUp || !snap ? "" : " · as of link loss");
     pe.className = "pill " + pill.replace(" ", "_");
     tile.classList.toggle("sel", !!(ns && ns.candidates.length));
 
@@ -342,11 +351,19 @@ function subtitle() {
   const tracking = ["A", "B"].filter((n) => snap.nodes[n] && snap.nodes[n].has_target && !snap.nodes[n].lost);
   switch (p) {
     case "STANDBY": return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
-    case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + " Scouts searching the drift area.";
+    case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + " Drone searching the drift area.";
     case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` : "Candidate needs a decision."; }
     case "TRACKING": {
       if (!tracking.length) { const la = snap.last_accepted; return `All scouts lost visual — last fix ${fmtAge(t - la.capture_ts)} old, still fresh.`; }
-      return `Scout ${tracking.join(" + ")} on the person.` + (snap.following ? " Scout A camera following." : snap.nodes.A.has_target && !snap.follow_enabled ? " Following stopped by coordinator." : "");
+      const names = tracking.map((n) => (snap.roles && n === snap.roles.rover ? "rover" : snap.roles && n === snap.roles.drone ? "drone" : "Scout " + n));
+      const d = snap.dispatch;
+      let extra = "";
+      if (d && d.status === "arrived") extra = " Rover on scene.";
+      else if (d && !tracking.includes(snap.roles.rover)) extra = ` Rover ${({ dispatched: "en route", driving: "en route" })[d.status] || d.status} (${d.plan.basis}).`;
+      else if (!d && snap.roles && tracking.includes(snap.roles.drone)) extra = " Dispatch the rover to recover.";
+      if (!snap.follow_enabled) extra += " Following stopped by coordinator.";
+      const who = names.join(" + ");
+      return who.charAt(0).toUpperCase() + who.slice(1) + " on the target." + extra;
     }
     case "CONTACT_LOST": { const la = snap.last_accepted; return `No scout has seen the person for ${fmtAge(t - la.capture_ts)}. Search area growing from the last sighting.`; }
     case "ENDED": return `Incident ended at ${fmtTime(inc.ended_ts)}. History preserved; deck watch re-armed.`;
@@ -371,8 +388,11 @@ function renderBanner() {
   const cands = allCandidates();
   $("#btn-confirm").classList.toggle("hidden", !(active && cands.length));
   $("#btn-reject").classList.toggle("hidden", !(active && cands.length));
+  const rover = snap.roles ? snap.roles.rover : "B";
+  const rv = snap.nodes[rover];
+  $("#btn-dispatch").classList.toggle("hidden", !(active && snap.last_accepted && !snap.dispatch && !(rv && rv.has_target)));
   const fb = $("#btn-follow");
-  fb.classList.toggle("hidden", !(active && snap.nodes.A && snap.nodes.A.has_target));
+  fb.classList.toggle("hidden", !(active && rv && (rv.has_target || snap.dispatch)));
   fb.textContent = snap.follow_enabled ? "STOP FOLLOWING" : "RESUME FOLLOWING";
   $("#btn-end").classList.toggle("hidden", !active);
   $("#btn-end").classList.toggle("armed", Date.now() < endArmedUntil);

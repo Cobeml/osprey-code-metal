@@ -59,6 +59,11 @@ button { font: inherit; background: #21262d; color: var(--text); border: 1px sol
 button:hover { background: #30363d; }
 button.big { font-size: 17px; font-weight: 800; padding: 10px 18px; }
 button.green { background: var(--green); border-color: #2ea043; }
+button.blue { background: var(--blue); border-color: #388bfd; }
+.pill.EN_ROUTE, .pill.SEARCHING, .pill.DISPATCHED, .pill.DRIVING, .pill.APPROACHING { background: var(--blue); }
+.pill.ON_SCENE, .pill.ARRIVED { background: var(--green); }
+.tile .target { position: absolute; right: 8px; bottom: 6px; font-size: 11px; color: #c9d1d9;
+  background: rgba(0,0,0,.6); padding: 1px 6px; border-radius: 4px; }
 button.armed { background: var(--red); }
 button.pending { opacity: .6; }
 #toast { color: var(--muted); font-size: 14px; }
@@ -86,3 +91,8 @@ body.linklost main, body.linklost footer { filter: brightness(.6) saturate(.6); 
   padding: 1px 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .leaflet-tooltip.mk-label:before { display: none; }
 #banner { grid-row: 1; } main { grid-row: 3; } footer { grid-row: 4; }
+@media (max-width: 1100px) {
+  #banner { grid-template-columns: 1fr auto; row-gap: 4px; }
+  #banner #subtitle { grid-column: 1 / -1; grid-row: 2; }
+  main { grid-template-columns: 1fr 340px; }
+}

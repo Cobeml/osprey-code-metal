@@ -85,6 +85,8 @@ class ScoutIngest:
                         c.wake.set()
                     elif "sync" in m:
                         c.offset.add(m["sync"] / 1000, m["srv"] / 1000, m["recv"] / 1000)
+                    elif m.get("type") == "rover_state" and node_id == self.g.rover:
+                        self.g.rover_report(str(m.get("state", "")))
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
@@ -128,7 +130,7 @@ class ScoutIngest:
                 continue
             hdr, jpeg, received, c = slot
             try:
-                dets, ms = await asyncio.to_thread(self._detect, jpeg)
+                dets, ms = await asyncio.to_thread(self._detect, node_id, jpeg)
                 capture = c.offset.to_server(hdr["capture_ts_ms"] / 1000.0, received)
                 dets = tracker.update(capture, dets)
                 self.g.ingest_frame(node_id, jpeg, hdr["session_id"], int(hdr["seq"]), capture,
@@ -142,10 +144,13 @@ class ScoutIngest:
             except Exception:  # noqa: BLE001
                 log.exception("scout worker %s", node_id)
 
-    def _detect(self, jpeg: bytes) -> tuple[list[dict], float]:
-        det = self.g.detector
-        if det is None:
+    def _detect(self, node_id: str, jpeg: bytes) -> tuple[list[dict], float]:
+        try:
+            import cv2
+            import numpy as np
+        except ImportError:
             return [], 0.0
         t0 = time.perf_counter()
-        dets, _ = det.detect_jpeg(jpeg)
+        bgr = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+        dets = self.g.detect(node_id, bgr)
         return dets, (time.perf_counter() - t0) * 1000

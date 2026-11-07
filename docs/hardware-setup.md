@@ -21,7 +21,21 @@ The deck camera declares man overboard when a person crosses a rail line. Depth 
 
 **Checkpoint:** "Aurora mounted right side up, height X m, rail tape at Y m." Claude grabs a frame and calibrates the rail distance with you standing on the tape.
 
-## H2. Phone scout (≈5 min) — needed by Phase 4
+## H2a. FPV drone video into the Pi (BETAFPV Aquila16, analog 5.8 GHz) — Scout A
+
+The drone has no onboard recording or GPS; its camera goes out over analog 5.8 GHz to the VR03 goggles. Get that same signal into the Pi **live**:
+
+1. **Best: a 5.8 GHz receiver with USB (UVC) output** plugged into the Pi, for example an Eachine ROTG02 / Skydroid-style "5.8G OTG/UVC receiver". Set it to the drone's channel (use the goggles' band/channel or its auto-search). It shows up as a USB webcam.
+2. **Alternative: goggles AV-out → USB composite capture dongle → Pi.** Only if your goggles actually have a video-out jack (the VR03's AV-out isn't documented; check the jack and the manual).
+3. **Backup only: the goggles' DVR** (microSD, .avi, 640×480 @ 30 fps per the Oscar Liang review). Copy the file to the Pi and replay it as a feed labeled RECORDED FLIGHT. It can't drive the live story (no live sighting → no live dispatch), so use it only if live capture fails.
+
+**Checkpoint:** "Drone receiver plugged into the Pi." Claude checks `/api/video_devices`, switches Scout A to `usb`, and tunes the green-ball detector.
+
+## H2b. Green foam ball = person in the water
+
+The scouts look for a **green foam ball** (person-in-water stand-in; COCO "sports ball" + green color detector). Pick a saturated green that doesn't match anything else in the room; keep green tape/clothing out of the water area.
+
+## H2. Phone scout (≈5 min) — optional fallback for either scout
 
 1. Charge the phone. Any modern phone with Chrome or Safari works. It needs internet (cellular or venue Wi-Fi).
 2. Wait for Claude to give you a `https://….trycloudflare.com/scout` URL, open it, allow camera access, and pick "Scout B".
@@ -60,7 +74,11 @@ Goal: Claude can SSH into the TurboPi over the wired switch, and the Hiwonder de
    Use the real username if it isn't `pi`.
 6. Connect the TurboPi to venue Wi-Fi too (it pushes video to the Pi via the internet tunnel during the demo, so it can drive around untethered).
 
-**Checkpoint:** "TurboPi at 169.254.50.3, user X, key copied, Hiwonder demo moves pan-tilt." Claude takes it from there.
+7. Note whether the Hiwonder app can **drive the chassis** (mecanum wheels) as well as move the pan-tilt, and the name of its Python SDK folder (often under `/home/pi/` or `/home/pi/TurboPi/`).
+
+The TurboPi is now **Scout B, the rover that gets dispatched** to the drone's sighting. It starts beside the deck camera, facing the same way. Claude needs to call the chassis and pan-tilt from Python.
+
+**Checkpoint:** "TurboPi at 169.254.50.3, user X, key copied, Hiwonder demo moves pan-tilt and drives." Claude takes it from there.
 
 ## H4. Demo layout (≈10 min, any time)
 

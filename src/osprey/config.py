@@ -37,7 +37,25 @@ class Settings:
     scenario_multiplier: float = 60.0
     drift_particles: int = 1500
     env_fixture: str = ""  # path; empty = newest fixtures/env/massbay-*.json
-    # scouts
+    # scouts: roles, labels and what each node looks for (person | ball | person+ball)
+    drone_node: str = "A"
+    rover_node: str = "B"
+    label_ship: str = "SHIP DECK CAM"
+    label_A: str = "SCOUT A · FPV drone (pilot flown)"
+    label_B: str = "SCOUT B · TurboPi rover (ground stand-in)"
+    target_ship: str = "person+ball"
+    target_A: str = "ball"
+    target_B: str = "ball"
+    target_label: str = "green ball (stand-in for the person in the water)"
+    green_hsv_lo: tuple = (35, 80, 50)
+    green_hsv_hi: tuple = (85, 255, 255)
+    capture_device: str = "auto"   # drone video on the Pi: auto = first uvcvideo device
+    capture_file: str = ""         # recorded flight to replay (goggles DVR .avi)
+    capture_fps: float = 12.0
+    # rover dispatch (rover starts beside the deck camera, facing along its optical axis)
+    dispatch_heading_deg: float = 0.0
+    dispatch_distance_m: float = 1.5
+    dispatch_stop_short_m: float = 0.4
     sim_fps: float = 10.0
     detector: str = "hailo"  # hailo|none
     hef_path: str = "/usr/share/hailo-models/yolov8s_h8.hef"
@@ -62,5 +80,10 @@ class Settings:
             env = os.environ.get(f"OSPREY_{name.upper()}")
             if env is not None and name != "extra":
                 typ = type(getattr(s, name))
-                setattr(s, name, typ(env) if typ is not bool else env.lower() in ("1", "true", "yes"))
+                if typ is bool:
+                    setattr(s, name, env.lower() in ("1", "true", "yes"))
+                elif typ is tuple:
+                    setattr(s, name, tuple(int(v) for v in env.split(",")))
+                else:
+                    setattr(s, name, typ(env))
         return s

@@ -53,8 +53,11 @@ def main():
     a = cmd("confirm", candidate_id=cands(s)[0]["candidate_id"])
     s, dt = wait(lambda s: s["phase"] == "TRACKING", 3, "tracking")
     rows.append(("confirm -> TRACKING", dt, a["message"]))
-    s, dt = wait(lambda s: all(s["nodes"][n]["has_target"] for n in ("A", "B")), 15, "second scout auto-associates")
-    rows.append(("second scout auto-associated", dt, "<= 50 m rule"))
+    rover = s.get("roles", {}).get("rover", "B")
+    a = cmd("dispatch")
+    rows.append(("dispatch rover", 0.0, a["message"]))
+    s, dt = wait(lambda s: all(s["nodes"][n]["has_target"] for n in ("A", "B")), 15, "rover auto-associates")
+    rows.append(("rover found target, auto-associated", dt, "<= 50 m rule"))
     cmd("demo_hide", hidden=True)
     s, dt = wait(lambda s: s["phase"] == "CONTACT_LOST" and s["drift"], 12, "contact lost + drift")
     a0 = s["drift"]["area90_m2"]

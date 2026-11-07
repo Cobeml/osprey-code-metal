@@ -24,9 +24,11 @@ from .follow import FollowController
 from .geo import LatLon, ShipPose, latlon_to_enu
 from .incident import IncidentEngine
 from .nodes.aurora import AuroraNode
+from .nodes.capture import CaptureNode, list_uvc
 from .nodes.sim import SimScout, SimShipCam
 from .nodes.ws_ingest import ScoutIngest
 from .perception.detector import make_detector
+from .perception.targets import detect_targets
 from .scenario import Scenario
 from .shipcam import RailTrigger
 from .store import EventStore
@@ -35,11 +37,6 @@ log = logging.getLogger("osprey")
 import faulthandler, signal, sys  # noqa: E401,E402
 faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
 
-NODE_LABELS = {
-    "ship": "SHIP DECK CAM",
-    "A": "SCOUT A · rover (ground stand-in for drone)",
-    "B": "SCOUT B · phone (proxy for 2nd drone)",
-}
 EVIDENCE_MIN_PERIOD_S = 0.5
 
 
@@ -66,8 +63,13 @@ class Ground:
         self.sources = {"ship": settings.source_ship, "A": settings.source_A, "B": settings.source_B}
         self.sim_ship = SimShipCam(settings.rail_m, settings.cam_height_m, settings.cam_fx,
                                    settings.cam_fy, settings.cam_cx, settings.cam_cy)
-        self.sim_scouts = {"A": SimScout("A", "Scout A (rover stand-in)", 1),
-                           "B": SimScout("B", "Scout B (phone proxy)", 2)}
+        self.labels = {"ship": settings.label_ship, "A": settings.label_A, "B": settings.label_B}
+        self.targets = {"ship": settings.target_ship, "A": settings.target_A, "B": settings.target_B}
+        self.drone, self.rover = settings.drone_node, settings.rover_node
+        self.sim_scouts = {"A": SimScout("A", self.labels["A"].split("·")[-1].strip(), 1),
+                           "B": SimScout("B", self.labels["B"].split("·")[-1].strip(), 2)}
+        self.dispatch_state: Optional[dict] = None  # rover dispatch: {ts, status, plan}
+        self.ship_ball: Optional[dict] = None       # ball fix on the deck camera (real relative)
         self.last_evidence: dict[str, float] = {}
         self.latest_jpeg: dict[str, bytes] = {}
         self.fps: dict[str, list[float]] = {}
@@ -77,6 +79,8 @@ class Ground:
         self.aurora = AuroraNode(self, settings.aurora_mode, settings.aurora_flip)
         self.scouts = ScoutIngest(self)
         self.follow = FollowController()
+        self.capture = CaptureNode(self, self.drone, settings.capture_device,
+                                   settings.capture_file, settings.capture_fps)
         self.last_ship_dets: list[dict] = []
         self.calib_path = rt / "calibration.json"
         if self.calib_path.exists():
@@ -109,6 +113,7 @@ class Ground:
                 self.scenario.on_mob(Location(**loc) if loc else None, e["capture_ts"])
                 self.drift.clear()
             elif t == "end":
+                self.dispatch_state = None
                 self.scenario.end()
                 self.sim_ship.reset()
                 self.trigger.reset()
@@ -126,6 +131,12 @@ class Ground:
         (d / name).write_bytes(jpeg)
         return f"{inc}/{name}"
 
+    # -------------------------------------------------------------- detection
+    def detect(self, node_id: str, bgr) -> list[dict]:
+        """Run this node's target detectors on a BGR frame (any thread)."""
+        return detect_targets(self.targets.get(node_id, "person"), bgr, self.detector,
+                              (self.s.green_hsv_lo, self.s.green_hsv_hi))
+
     # -------------------------------------------------------------- frames
     def ingest_frame(self, node_id: str, jpeg: bytes, session_id: str, seq: int,
                      capture_ts: float, received_ts: float, clock_quality: str,
@@ -142,8 +153,14 @@ class Ground:
         image_ref = None
         if node_id == "ship":
             self.last_ship_dets = dets
+            persons = [d for d in dets if d.get("cls", "person") == "person"]
+            balls = [d for d in dets if d.get("cls") in ("ball", "green") and d.get("z_m")]
+            if balls:
+                b = max(balls, key=lambda d: d["confidence"])
+                self.ship_ball = {"x_m": b.get("x_m", 0.0), "z_m": b["z_m"], "ts": capture_ts,
+                                  "source": source}
             trig = self.trigger.update(capture_ts, [(d["track_id"], d.get("z_m"), d.get("x_m", 0.0))
-                                                   for d in dets])
+                                                   for d in persons])
             if trig and self.engine.armed:
                 p = self.ship.camera_point(trig["x_m"] or 0.0, trig["z_m"] or self.s.rail_m)
                 prov = "real_relative" if source == "aurora" else "simulated"
@@ -186,7 +203,7 @@ class Ground:
         for d in dets:
             cid = f"{node_id}:{session_id}:{d['track_id']}"
             if node_id == "ship":
-                st = "person"
+                st = "person" if d.get("cls", "person") == "person" else "ball"
             elif node.target_track == d["track_id"] and not node.lost and node.has_target:
                 st = "tracking"
             elif cid in node.candidates:
@@ -196,13 +213,14 @@ class Ground:
             boxes.append({"bbox": list(d["bbox"]), "track_id": d["track_id"], "state": st,
                           "candidate_id": cid if st == "candidate" else None,
                           "confidence": round(d["confidence"], 2),
+                          "cls": d.get("cls"),
                           "z_m": round(d["z_m"], 2) if d.get("z_m") is not None else None})
-        if node_id == "A" and source == "ws":
+        if node_id == self.rover and source == "ws":
             tb = next((b["bbox"] for b in boxes if b["state"] == "tracking"), None)
-            msg = self.follow.on_frame(self.engine.following("A"), self.engine.follow_enabled, tb,
-                                       capture_ts, now)
+            msg = self.follow.on_frame(self.engine.following(self.rover), self.engine.follow_enabled,
+                                       tb, capture_ts, now)
             if msg:
-                self.scouts.send("A", msg)
+                self.scouts.send(self.rover, msg)
         header = {"node_id": node_id, "seq": seq, "capture_ts": capture_ts,
                   "received_ts": received_ts, "width": width, "height": height,
                   "boxes": boxes, "source": source}
@@ -223,8 +241,11 @@ class Ground:
                 for nid, sc in self.sim_scouts.items():
                     if self.sources[nid] != "sim":
                         continue
-                    visible = (self.engine.active and self.scenario.launched(nid, now)
-                               and not self.scenario.hidden)
+                    if nid == self.rover:  # the rover only searches once dispatched
+                        launched = bool(self.dispatch_state) and now - self.dispatch_state["ts"] >= 4.0
+                    else:
+                        launched = self.scenario.launched(nid, now)
+                    visible = self.engine.active and launched and not self.scenario.hidden
                     following = self.engine.following(nid)
                     jpeg, dets = await asyncio.to_thread(sc.frame, now, visible, following)
                     self.ingest_frame(nid, jpeg, sc.session_id, sc.seq, now, now, "synced", dets)
@@ -239,6 +260,7 @@ class Ground:
         while True:
             try:
                 self.record(self.engine.tick())
+                self.capture.ensure()
                 now = self.clock.now()
                 fresh = self.engine.any_fresh(now)
                 self.sclock.set_fast(self.engine.active and not fresh)
@@ -256,7 +278,8 @@ class Ground:
         snap = self.engine.snapshot()
         now = self.clock.now()
         for nid, n in snap["nodes"].items():
-            n["label"] = NODE_LABELS.get(nid, nid)
+            n["label"] = self.labels.get(nid, nid)
+            n["target"] = self.targets.get(nid)
             n["source"] = self.sources.get(nid, "?")
             n["fps"] = round(len(self.fps.get(nid, [])) / 2.0, 1)
             if nid in self.scouts.stats:
@@ -274,7 +297,29 @@ class Ground:
         snap["detector"] = type(self.detector).__name__ if self.detector else "none"
         snap["scenario"] = {"multiplier": self.sclock.multiplier, "hidden": self.scenario.hidden}
         snap["outage"] = max(0.0, self.gateway.outage_until - now)
+        snap["roles"] = {"drone": self.drone, "rover": self.rover}
+        snap["target_label"] = self.s.target_label
+        snap["dispatch"] = self.dispatch_state
+        snap["capture"] = {"status": self.capture.status, "device": self.capture.opened}
         return snap
+
+    # -------------------------------------------------------------- rover dispatch
+    def dispatch_plan(self) -> dict:
+        """Where to send the rover. With a fresh ball fix from the deck camera (real relative
+        geometry) drive to it; otherwise run out a configured distance and search by camera."""
+        b = self.ship_ball
+        if b and self.clock.now() - b["ts"] <= 15.0 and b.get("source") == "aurora":
+            heading = math.degrees(math.atan2(b["x_m"], b["z_m"]))
+            dist = max(0.0, math.hypot(b["x_m"], b["z_m"]) - self.s.dispatch_stop_short_m)
+            return {"heading_deg": round(heading, 1), "distance_m": round(dist, 2),
+                    "basis": "deck-camera ball fix (real relative)"}
+        return {"heading_deg": self.s.dispatch_heading_deg, "distance_m": self.s.dispatch_distance_m,
+                "basis": "default run-out, then camera search"}
+
+    def rover_report(self, state: str) -> None:
+        if self.dispatch_state is not None:
+            self.dispatch_state["status"] = state
+            self.dispatch_state["status_ts"] = self.clock.now()
 
     def forcing_bearing(self) -> float:
         wu, wv, cu, cv = self.forcing.at(0)
@@ -345,6 +390,22 @@ class Ground:
                                                    "rail_row_frac": self.s.rail_row_frac}))
             return {"command_id": cmd.command_id, "ok": True,
                     "message": f"rail at {self.s.rail_m:.2f} m (depth)"}
+        if t == "dispatch":
+            if not self.engine.active:
+                return {"command_id": cmd.command_id, "ok": False, "message": "no active incident"}
+            if self.engine.last_accepted is None:
+                return {"command_id": cmd.command_id, "ok": False,
+                        "message": "confirm a sighting before dispatching the rover"}
+            if self.dispatch_state is not None:
+                return {"command_id": cmd.command_id, "ok": True, "message": "rover already dispatched"}
+            plan = self.dispatch_plan()
+            self.dispatch_state = {"ts": now, "status": "dispatched", "plan": plan,
+                                   "node": self.rover}
+            self.engine.follow_enabled = True
+            self.scouts.send(self.rover, {"type": "dispatch", **plan})
+            self.record([self.engine._ev("dispatch", now, self.rover, **plan)])  # noqa: SLF001
+            return {"command_id": cmd.command_id, "ok": True,
+                    "message": f"rover dispatched: {plan['distance_m']} m at {plan['heading_deg']}° ({plan['basis']})"}
         if t == "demo_source":
             node, src = a.get("node"), a.get("source")
             if node in self.sources and src:
@@ -447,6 +508,11 @@ def api_frame(node_id: str):
     if jpg is None:
         return JSONResponse({"error": "no frame"}, status_code=404)
     return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/video_devices")
+def api_video_devices():
+    return {"devices": list_uvc(), "capture": ground.capture.status}
 
 
 @app.get("/api/history")
