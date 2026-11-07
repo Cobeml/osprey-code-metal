@@ -27,8 +27,6 @@ Novelty is an open hypothesis. Existing products and research already provide pi
 
 ## Code and data availability
 
-See the [software shortlist](../engineering/software.md) for repositories, licensing observations and implementation roles.
-
 [MAMMS](https://zenodo.org/records/17979190) includes thermal UAV sequences and ground-truth/telemetry for a geolocation subset, but requires an access agreement. [SeaDronesSee](https://github.com/Ben93kie/SeaDronesSee) supplies RGB maritime benchmarks. Dataset access, licenses, modality and available telemetry need checking before selecting a replay.
 
 The [PDMS paper repository](https://github.com/DTU-IPL/pdms-man-overboard) presently contains a README promising code after acceptance. Treat the paper as research context rather than an available implementation dependency.
