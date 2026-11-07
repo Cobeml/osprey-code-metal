@@ -138,8 +138,8 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - Done when: `pytest` runs on the Mac (0 tests OK), deploy works, `http://169.254.50.2:8000/health` answers from the Mac.
 
 ### Phase 1 — Core domain, test-first (2 h) [none]
-- [ ] `contracts.py`, `clock.py` (injectable fake clock), `geo.py`, `store.py`, `incident.py`.
-- [ ] Tests: freshness 6.0 fresh / 6.001 stale; 49.9 / 50.0 / 50.1 m for both reference rules; missing/unreliable location → confirm; duplicates, reordering, old-session packets, restarted session; End Incident is final (late events go to history, retried end is idempotent); confirm idempotent by command_id; multiple candidates.
+- [x] `contracts.py`, `clock.py` (injectable fake clock), `geo.py`, `store.py`, `incident.py`.
+- [x] Tests: freshness 6.0 fresh / 6.001 stale; 49.9 / 50.0 / 50.1 m for both reference rules; missing/unreliable location → confirm; duplicates, reordering, old-session packets, restarted session; End Incident is final (late events go to history, retried end is idempotent); confirm idempotent by command_id; multiple candidates.
 - Done when: all tests green. Covers FR-02/04/05/08/09/11/14 logic.
 
 ### Phase 2 — Simulated end-to-end + UI v1 (2.5 h) [none]

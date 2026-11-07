@@ -31,7 +31,7 @@ MacBook Air (M1, 8 GB)                         Raspberry Pi 5 (16 GB), hostname 
 - USB `3251:1930`, serial `HY400523001036413G00755`, USB 2.0 (480 Mb/s); plug directly into the Pi.
 - Not UVC: needs the Deptrum SDK. Installed udev rule `/etc/udev/rules.d/99-deptrum-libusb.rules` (vendor 3251, mode 0666).
 - SDK: Hiwonder Google Drive, `deptrum-ros-driver-aurora930-aarch64-0.7.4-source.tar.gz` (sha256 `4bc2b6bb…be83af8`), extracted at `~/vendor/deptrum/` on the Pi. Library: `ext/deptrum-stream-aurora900-linux-aarch64-v1.1.4/{lib,include}`. C++ only, depends on system libc/libstdc++/libgomp.
-- Verified probe: [`native/aurora/aurora_probe.cc`](../native/aurora/aurora_probe.cc) (built copy at `~/mob-sar/perception/aurora/` on the Pi).
+- Verified probe: [`native/aurora/aurora_probe.cc`](../native/aurora/aurora_probe.cc) (built at `~/osprey/native/aurora/aurora_probe` on the Pi by `native/aurora/build.sh`; an older copy remains in `~/mob-sar`).
 
 | Mode | Resolution (RGB/IR/depth, aligned) | Measured fps (15 requested) |
 |---|---|---|
