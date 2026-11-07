@@ -1,3 +1,14 @@
+# Team 29 — Maritime search and rescue
+
+Primary repository as of November 7, 2026 is [CodeMetalForge-Hackathon/Team-29](https://github.com/CodeMetalForge-Hackathon/Team-29). Continue project work in this checkout.
+
+Start with the [project index](INDEX.md), [open-ocean MOB proposal](01-ideas/open-ocean-mob-plan.md), and [mission requirements](01-ideas/forge-2026-mission-brief.md). PRD discovery is underway, with one question at a time. The primary operator and final demo scope remain open decisions.
+
+The repository includes preparation history, research, the starter scaffold and [interactive concept mockups](05-prototypes/README.md). The application and hardware integration are still to be built. The [portable handover](HANDOVER.md) and the preparation material below preserve historical context and may describe earlier locations or repository state.
+
+The existing Team-29 LICENSE is the repository's license. Third-party code, data, and basemaps retain their own terms.
+
+---
 # Disaster response hackathon
 
 Saved 2026-10-29. The event is **next week**, as described by Colton; its exact date and location are not yet recorded.

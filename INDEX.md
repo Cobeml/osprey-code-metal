@@ -1,6 +1,6 @@
 # Project index
 
-[Start here](README.md). Prepared 2026-10-29. Local project: `/Users/dexter/Projects/code-metal-hackathon`.
+[Start here](README.md). Updated November 7, 2026. Primary repository is [Team-29](https://github.com/CodeMetalForge-Hackathon/Team-29).
 
 ## 01 Ideas
 
@@ -36,4 +36,9 @@ The notes retain evidence gaps and source-level detail. The guides and report ar
 - [Starter ignore rules](04-software/starter/.gitignore)
 - Code placeholders: [src](04-software/starter/src/), [firmware](04-software/starter/firmware/), [tests](04-software/starter/tests/), [scripts](04-software/starter/scripts/)
 
-The whole hackathon workspace is now one local Git repository on unborn `main`, without a remote or initial commit. The former nested starter Git metadata was promoted to the root on November 3; its eight original untracked files were preserved. See [current repository status](README.md#current-state) and the preflight for proposed contributor setup. No application stack or public license is selected.
+## 05 Prototypes
+
+- [Interactive mockups and limitations](05-prototypes/README.md)
+- [Historical portable handover](HANDOVER.md)
+
+The team repository preserves the original preparation history. The PRD is being developed through a one-question-at-a-time interview. The starter currently contains placeholders.

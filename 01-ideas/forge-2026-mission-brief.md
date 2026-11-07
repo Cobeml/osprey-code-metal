@@ -41,4 +41,3 @@ At the table, show what works, distinguish prior work from weekend work, explain
 The organizer plan calls for choosing a problem by Saturday noon, testing risky components by 6:00 PM, integrating by Sunday 2:00 AM, and using Sunday morning to stabilize and rehearse the demo. Keep a replay or simulated fallback for unavailable hardware.
 
 Kits are signed out to teams, and all checked-out items must be returned before leaving Sunday. The brief lists a Raspberry Pi 5 with active cooling and AI HAT, limited Jetson Nanos, and shared compute, radio, imaging, sensing, and test equipment. Drones fly only in daylight with Code Metal staff. Discord carries organizer updates and schedule changes. Hardware model numbers and actual team checkout remain to be confirmed.
-
