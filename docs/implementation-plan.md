@@ -143,10 +143,10 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - Done when: all tests green. Covers FR-02/04/05/08/09/11/14 logic.
 
 ### Phase 2 — Simulated end-to-end + UI v1 (2.5 h) [none]
-- [ ] `nodes/sim.py`: three sim nodes producing synthetic JPEGs (moving person rectangle on a sea-colored background, labeled SIM) at 10 fps, plus a scripted ship-cam rail crossing.
-- [ ] `scenario.py` with ship pose (default ≈ 42.35 N, −70.80 W, heading configurable) and sim truth.
-- [ ] `gateway.py`, `app.py` routes, `web/` coordinator UI per the sketch, demo drawer.
-- [ ] Run locally on the Mac, then deploy to the Pi and open `http://169.254.50.2:8000` on the Mac.
+- [x] `nodes/sim.py`: three sim nodes producing synthetic JPEGs (moving person rectangle on a sea-colored background, labeled SIM) at 10 fps, plus a scripted ship-cam rail crossing.
+- [x] `scenario.py` with ship pose (default ≈ 42.35 N, −70.80 W, heading configurable) and sim truth.
+- [x] `gateway.py`, `app.py` routes, `web/` coordinator UI per the sketch, demo drawer.
+- [x] Run locally on the Mac, then deploy to the Pi and open `http://169.254.50.2:8000` on the Mac.
 - Done when: a fully simulated story plays: auto MOB → search area → candidate → confirm → tracking → hide → drift grows → reacquire → end. Commit, and tell the user "sim demo works" (this is the safety net).
 
 ### Phase 3 — Ship deck camera, real (2 h) [Aurora connected; H1 for calibration]

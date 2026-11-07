@@ -72,23 +72,43 @@ class OffsetEstimator:
 
 
 class ScenarioClock:
-    """Accelerated clock used ONLY for drift integration. Freshness and outage timing always use
-    the real clock. Changing the multiplier keeps simulated elapsed time continuous."""
+    """Accelerated scenario clock, used ONLY for drift integration and the simulated person truth.
+    Freshness and outage timing always use the real clock.
 
-    def __init__(self, clock: Clock, multiplier: float = 60.0):
+    The clock runs at `multiplier` while `fast` (no sighting is fresh) and at 1x otherwise, so the
+    displayed estimate and the simulated world share one timeline. Changing the rate keeps
+    simulated time continuous; sim_at() answers for past real times too.
+    """
+
+    def __init__(self, clock: Clock, multiplier: float = 60.0, fast: bool = True):
         self.clock = clock
-        self.multiplier = multiplier
-        self._anchor_real = clock.now()
-        self._anchor_sim = 0.0
+        self.multiplier = float(multiplier)
+        self.fast = fast
+        self._segs: list[tuple[float, float, float]] = [(clock.now(), 0.0, self.rate)]
+
+    @property
+    def rate(self) -> float:
+        return self.multiplier if self.fast else 1.0
+
+    def sim_at(self, real_ts: float) -> float:
+        seg = self._segs[0]
+        for s in self._segs:
+            if s[0] <= real_ts:
+                seg = s
+            else:
+                break
+        return seg[1] + (real_ts - seg[0]) * seg[2]
 
     def sim_elapsed(self) -> float:
-        return self._anchor_sim + (self.clock.now() - self._anchor_real) * self.multiplier
+        return self.sim_at(self.clock.now())
 
     def set_multiplier(self, m: float) -> None:
-        self._anchor_sim = self.sim_elapsed()
-        self._anchor_real = self.clock.now()
+        sim_now = self.sim_elapsed()
         self.multiplier = float(m)
+        self._segs.append((self.clock.now(), sim_now, self.rate))
 
-    def reset(self) -> None:
-        self._anchor_real = self.clock.now()
-        self._anchor_sim = 0.0
+    def set_fast(self, fast: bool) -> None:
+        if fast != self.fast:
+            sim_now = self.sim_elapsed()
+            self.fast = fast
+            self._segs.append((self.clock.now(), sim_now, self.rate))
