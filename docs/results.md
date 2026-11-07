@@ -26,6 +26,7 @@ Measured November 7, 2026 on the demo hardware unless marked. "Sim" means the Ph
 | Ground keeps tracking during outage | yes | phase TRACKING throughout, events archived and replayed | same, plus `/api/state` |
 | Recovery after a real cable pull | ≤ 3 s | *pending (needs the user present)* | `scripts/measure_outage.py --watch 60` |
 | Phone scout fps / latency through tunnel | ≥ 10 fps, ≤ 1 s | *pending (cloudflared + H2)* | |
+| Drift forcing | real snapshot | Open-Meteo 2026-11-07 21:00 UTC, 42.35N 70.80W: wind 2.8 m/s from 327°, current 0.17 m/s toward 304° (`fixtures/env/massbay-20261107.json`) | `scripts/fetch_env.py` |
 | Pi CPU, three sim feeds + UI | — | ~20% of one core (uvicorn) | `top` |
 
 ## Findings worth knowing

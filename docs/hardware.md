@@ -53,5 +53,5 @@ MacBook Air (M1, 8 GB)                         Raspberry Pi 5 (16 GB), hostname 
 ## Not yet set up
 
 - TurboPi rover (Scout A).
-- Phone scout (needs the Cloudflare tunnel; `cloudflared` not installed yet).
+- Phone scout: `cloudflared` 2026.10.7 installed on the Pi (arm64 .deb from Cloudflare GitHub releases, sha256 d9407eb6…6bf836); tunnel not yet tested with the phone.
 - Any aircraft.

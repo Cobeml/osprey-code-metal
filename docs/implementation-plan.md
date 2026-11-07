@@ -134,7 +134,7 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - [ ] `scripts/run_pi.sh`: runs uvicorn on `0.0.0.0:8000` under `nohup` or `systemd --user`, logging to `~/osprey/runtime/`.
 - [ ] `scripts/check_hardware.py`: Hailo identify, Aurora present (USB 3251:1930), serial ports, camera open via probe, prints a pass/fail table.
 - [ ] Remove the obsolete `~/mob-sar` on the Pi (contains only the probe build).
-- [ ] Ask the user, then install `cloudflared` (arm64 .deb from Cloudflare's GitHub releases) on the Pi; `scripts/tunnel.sh` starts a quick tunnel and prints the URL.
+- [x] Ask the user, then install `cloudflared` (arm64 .deb from Cloudflare's GitHub releases) on the Pi; `scripts/tunnel.sh` starts a quick tunnel and prints the URL.
 - Done when: `pytest` runs on the Mac (0 tests OK), deploy works, `http://169.254.50.2:8000/health` answers from the Mac.
 
 ### Phase 1 — Core domain, test-first (2 h) [none]
@@ -168,9 +168,9 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - Done when: V-02/V-05 behavior has been shown live and timing is recorded.
 
 ### Phase 6 — Drift with real forcing (1.5 h) [none]
-- [ ] `scripts/fetch_env.py` → `fixtures/env/massbay-*.json` (ask before the first network fetch; it's tiny).
-- [ ] `drift.py` + tests: clock independence (changing the multiplier doesn't change freshness/outage timing), seeding policy, area grows monotonically while unseeded.
-- [ ] UI hulls and labels.
+- [x] `scripts/fetch_env.py` → `fixtures/env/massbay-*.json` (ask before the first network fetch; it's tiny).
+- [x] `drift.py` + tests: clock independence (changing the multiplier doesn't change freshness/outage timing), seeding policy, area grows monotonically while unseeded.
+- [x] UI hulls and labels.
 
 ### Phase 7 — TurboPi Scout A (2–3 h) [H3]
 - [ ] Inspect the TurboPi OS and Hiwonder SDK (servo control call, camera device). Don't modify vendor files.

@@ -66,7 +66,7 @@ Settings live in `src/osprey/config.py`; override them in `config.yaml` at the r
 
 ## Status
 
-Done: the fully simulated demo (Phase 2), the real deck-camera pipeline (Aurora + Hailo at ~14 fps), the phone scout page and ingest, outage injection and recovery, and drift with published PIW leeway coefficients. Pending: rail calibration on the mounted camera, the tunnel test with the phone, the TurboPi client, and the Open-Meteo snapshot.
+Done: the fully simulated demo (Phase 2), the real deck-camera pipeline (Aurora + Hailo at ~14 fps), the phone scout page and ingest, outage injection and recovery, and drift with published PIW leeway coefficients. Drift uses an Open-Meteo Massachusetts Bay snapshot (Nov 7). Pending: rail calibration on the mounted camera, the tunnel test with the phone, and the TurboPi client.
 
 ## Licensing
 
