@@ -58,7 +58,10 @@ Real hardware:
 | Build the Aurora bridge (once, on the Pi) | `ssh mob-pi '~/osprey/native/aurora/build.sh'` |
 | Deck camera on | `.venv/bin/python scripts/ctl.py demo_source node=ship source=aurora` (or `source_ship: aurora` in `config.yaml`) |
 | Calibrate the rail | stand on the tape, read `curl -s 169.254.50.2:8000/api/calibration`, then `scripts/ctl.py set_rail rail_m=<z>` |
-| Phone scout | `ssh mob-pi '~/osprey/scripts/tunnel.sh'`, open the printed URL on the phone, pick Scout B |
+| Drone video (Scout A) | plug the 5.8 GHz USB receiver into the Pi, check `curl -s 169.254.50.2:8000/api/video_devices`, then `scripts/ctl.py demo_source node=A source=usb` (recorded fallback: `capture_file` in `config.yaml`, `source=file`) |
+| Tunnel for the rover/phone | `ssh mob-pi '~/osprey/scripts/tunnel.sh'` prints the URL |
+| Rover (Scout B) on the TurboPi | `python3 scout_client.py <tunnel URL> --node B --hw hiwonder` (hardware calls filled in at H3) |
+| Phone (fallback scout) | open `<tunnel URL>/scout` on the phone |
 | Measure outage recovery | `.venv/bin/python scripts/measure_outage.py --inject 5` (or `--watch 60` and pull the cable) |
 | Server log | `ssh mob-pi '~/osprey/scripts/run_pi.sh log'` |
 
