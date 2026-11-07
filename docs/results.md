@@ -25,7 +25,9 @@ Measured November 7, 2026 on the demo hardware unless marked. "Sim" means the Ph
 | Recovery after a 5 s **software** outage | ≤ 3 s | current state 0.06–0.07 s after the outage ended, history 5–9 ms later (19 events during tracking) | `scripts/measure_outage.py --inject 5` |
 | Ground keeps tracking during outage | yes | phase TRACKING throughout, events archived and replayed | same, plus `/api/state` |
 | Recovery after a real cable pull | ≤ 3 s | *pending (needs the user present)* | `scripts/measure_outage.py --watch 60` |
-| Phone scout fps / latency through tunnel | ≥ 10 fps, ≤ 1 s | *pending (cloudflared + H2)* | |
+| Scout path through the Cloudflare tunnel (Mac on venue Wi-Fi as a stand-in scout) | ≥ 10 fps, ≤ 1 s | 10.0 fps processed, capture → processed on the Pi 39 ms (clock synced, RTT 37 ms), Hailo 15 ms | `scripts/fake_scout.py <tunnel> B 10` |
+| Phone scout fps / latency through tunnel | ≥ 10 fps, ≤ 1 s | *pending (H2)* | |
+| Tunnel exposure | scout only | `/scout` 200, `/`, `/api/*`, `/static/*` 403, display WS refused | `curl` via the tunnel URL; `tests/test_app.py` |
 | Drift forcing | real snapshot | Open-Meteo 2026-11-07 21:00 UTC, 42.35N 70.80W: wind 2.8 m/s from 327°, current 0.17 m/s toward 304° (`fixtures/env/massbay-20261107.json`) | `scripts/fetch_env.py` |
 | Pi CPU, three sim feeds + UI | — | ~20% of one core (uvicorn) | `top` |
 
