@@ -1,24 +1,24 @@
-# Local configuration and credentials
+# Personal context
+/AGENTS.md
+/HANDOVER.md
+/01-ideas/
+/.codex/
+/.claude/
+/.mcp.json
+/CLAUDE.md
+
+# Credentials
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-*.p12
-*.pfx
 credentials*.json
 secrets/
-.secrets/
 .aws/
 .ssh/
 
-# Local editor and OS files
-.DS_Store
-.idea/
-.vscode/
-*.swp
-
-# Dependency environments and caches
+# Tool environments
 .venv/
 venv/
 __pycache__/
@@ -28,16 +28,16 @@ __pycache__/
 .ruff_cache/
 node_modules/
 .pio/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
-# Generated builds and test output
+# Generated output and captured data
 build/
 dist/
-target/
 coverage/
-htmlcov/
 *.egg-info/
-
-# Runtime data and large generated assets
 runtime/
 artifacts/
 recordings/
@@ -46,10 +46,3 @@ models/
 *.sqlite
 *.sqlite3
 *.db
-*.bag
-*.mcap
-
-# Machine-specific assistant configuration
-/.codex/
-/.mcp.json
-/CLAUDE.md

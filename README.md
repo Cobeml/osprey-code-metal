@@ -1,50 +1,45 @@
-# Team 29 — Maritime search and rescue
+# Team 29 — Open-ocean man-overboard response
 
-Primary repository as of November 7, 2026 is [CodeMetalForge-Hackathon/Team-29](https://github.com/CodeMetalForge-Hackathon/Team-29). Continue project work in this checkout.
+Help a ship and rescue boat maintain a useful picture of a person in the water through intermittent drone observations and communications.
 
-Start with the [project index](INDEX.md), [open-ocean MOB proposal](01-ideas/open-ocean-mob-plan.md), and [mission requirements](01-ideas/forge-2026-mission-brief.md). PRD discovery is underway, with one question at a time. The primary operator and final demo scope remain open decisions.
+**Status — requirements discovery, November 7, 2026.** This repository contains the team's current planning foundation. Application code, hardware integration and measured performance are pending. The PRD interview continues one question at a time.
 
-The repository includes preparation history, research, the starter scaffold and [interactive concept mockups](05-prototypes/README.md). The application and hardware integration are still to be built. The preparation material below preserves historical context and may describe earlier locations or repository state.
+## Start here
 
-The existing Team-29 LICENSE is the repository's license. Third-party code, data, and basemaps retain their own terms.
+1. [Draft PRD](docs/product/prd.md) — problem, scope, proposed requirements and unresolved decisions.
+2. [System architecture](docs/engineering/architecture.md) — edge processing, communications and operator responsibilities.
+3. [Hardware and integrations](docs/engineering/hardware.md) — promised equipment, checkout dependencies and interface checks.
+4. [Software and public repositories](docs/engineering/software.md) — reusable components and selection constraints.
+5. [Verification and demo](docs/engineering/verification.md) — measurable acceptance cases.
+6. [Research](docs/research/man-overboard.md) — existing systems, physical constraints and supporting evidence.
+7. [Meeting notes](docs/meetings/README.md) — the two Granola discussions informing this project.
+8. [Team contribution workflow](CONTRIBUTING.md) — how to develop and integrate work.
 
----
-# Disaster response hackathon
+## Repository layout
 
-Saved 2026-10-29. The event is **next week**, as described by Colton; its exact date and location are not yet recorded.
+```text
+docs/
+  product/       PRD and project constraints
+  engineering/   Architecture, interfaces, hardware, software, verification
+  research/      Cited evidence and limitations
+  meetings/      Dated discussion records
+src/             Runtime implementation
+tests/           Automated verification
+fixtures/        Small, labeled reproducible scenario inputs
+CONTRIBUTING.md   Team workflow and implementation gates
+LICENSE          Apache-2.0 repository license
+```
 
-> The mission: help locate people, detect hazards, and get critical information to responders when infrastructure goes down. Start thinking about what you could build—and what could make a difference when every second counts.
+Use one repository and a small number of processes. Create implementation modules as their responsibilities become concrete. Runtime code belongs in src, repeatable checks in tests, and test inputs in fixtures. Source packages, execution commands and CI will be selected with the implementation stack.
 
-Start with a small system that reads one sensor, stores an observation, and shows it to a responder without Internet. The guaranteed kit supports that direction. Cameras, specialist radios and robots are shared equipment, so make them extensions until their availability and exact models are known.
+## Scenario and current proposal
 
-## Read in this order
+A crew member declares man overboard in open ocean. A camera node acquires a candidate, tracks observations and reports evidence to the ship. The operator view distinguishes a fresh sighting, reported visual loss, and a stale communications link. It preserves the last observation and presents a separately identified estimate when evidence ages.
 
-1. [Equipment guide](02-equipment/equipment-guide.md): what every listed item does and where it connects.
-2. [Three-hour crash course](02-equipment/crash-course.md): the concepts and one complete data path.
-3. [Software preparation list](04-software/preparation-list.md): essential, conditional and deferred tools, with upstream links.
-4. [Preflight checklist](04-software/preflight-checklist.md): what to prepare, test and ask before arrival.
-5. [Man-overboard research](03-research/reports/man-overboard-systems.md) covers existing systems, public repositories and prototype feasibility.
-6. [Research synthesis](03-research/reports/Disaster%20response%20hardware%20readiness.md): the main technical decisions and supporting evidence.
+The manual trigger and maritime mission come from the team discussions. One drone, three-second updates, live-versus-replay scope, GNSS assumptions and the primary operator remain proposed or unresolved. Consult the PRD before treating these as requirements.
 
-[INDEX.md](INDEX.md) links every deliverable and the underlying research. The [mission requirements](01-ideas/forge-2026-mission-brief.md) preserve the organizer briefing.
+The organizer briefing records **November 8, 2026 at noon EST** as the submission cutoff. See [event constraints](docs/product/event-constraints.md).
 
-## Folder map
+## Evidence and licensing
 
-| Folder | Contents |
-|---|---|
-| `01-ideas/` | Mission, confirmed context and proposed projects |
-| `02-equipment/` | Equipment guide, crash course, original PDF and extracted text |
-| `03-research/` | Cited synthesis and supporting research notes |
-| `04-software/` | Prioritized preparation, preflight and starter code within the workspace repository |
-
-## Current state
-
-The original PDF is saved and its copy verified byte-for-byte. Research uses official project and manufacturer sources checked on 2026-10-29. Mac preparation is the working assumption; the laptop being brought has not been confirmed. The Raspberry Pi and other Linux targets have separate setup requirements.
-
-November 3: the existing unborn `main` Git repository was promoted from `04-software/starter/.git` to the workspace root `/Users/dexter/Projects/code-metal-hackathon/.git`. The whole workspace now shares one repository; all eight original starter files and Git configuration were preserved. No files were staged, no commit was created and no remote was added. See [the verified boundary-conversion receipt](../../OS/checks/backups/hackathon-repo-boundary-2026-11-03/receipt.json). The [starter](04-software/starter/README.md) still contains a simulated event example and neutral code/firmware folders, with no application or installed dependencies. Its nested ignore rules apply to that subtree, not automatically to the entire workspace. The parent OS repository was not staged or committed.
-
-No software installation, hardware integration, performance measurement or emergency-use validation has been performed. Preparation recommendations and project ideas are proposals; no idea or implementation stack has been selected.
-
-## Standalone repository migration — November 3, 2026
-
-The workspace root is the single Git boundary, including the preserved eight starter files. The private GitHub destination is `colt11044/code-metal-hackathon`. Local `.codex/`, `.mcp.json`, and `CLAUDE.md` remain untracked. The earlier no-commit/no-remote paragraph above is the dated boundary-conversion receipt. No executable application or hardware validation is implied by publication.
+Label each result as live hardware, replay or simulation. Source availability does not establish device compatibility or field performance. Third-party code, model weights and datasets retain their own licenses. Record chosen versions and terms before incorporating them.
