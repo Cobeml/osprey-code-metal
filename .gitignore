@@ -49,3 +49,7 @@ models/
 
 # Local hardware captures (may contain people)
 hardware-checks/
+
+# Native build outputs
+native/aurora/aurora_probe
+native/aurora/aurora_bridge
