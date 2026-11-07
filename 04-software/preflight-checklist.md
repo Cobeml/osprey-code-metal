@@ -4,7 +4,7 @@ These are preparation tasks and proposed checks, not completed installations or 
 
 ## Before arrival
 
-- [ ] Confirm laptop OS/CPU, team skills and one candidate project. Keep the [baseline incident board](../01-ideas/idea-shortlist.md) as fallback.
+- [ ] Confirm laptop OS/CPU, team skills and one candidate project. Review the [open-ocean MOB proposal](../01-ideas/open-ocean-mob-plan.md) and confirm a demonstrable fallback.
 - [ ] Verify Git, familiar editor, Python and SSH. Download Arduino IDE from its official installer page.
 - [ ] Obtain exact board and Grove module IDs; cache the matching board core, libraries and basic examples.
 - [ ] Prepare a Python environment and pySerial; choose a small local storage/display path. Add only the selected vision/radio/UI branch.

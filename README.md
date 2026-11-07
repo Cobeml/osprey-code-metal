@@ -4,7 +4,7 @@ Primary repository as of November 7, 2026 is [CodeMetalForge-Hackathon/Team-29](
 
 Start with the [project index](INDEX.md), [open-ocean MOB proposal](01-ideas/open-ocean-mob-plan.md), and [mission requirements](01-ideas/forge-2026-mission-brief.md). PRD discovery is underway, with one question at a time. The primary operator and final demo scope remain open decisions.
 
-The repository includes preparation history, research, the starter scaffold and [interactive concept mockups](05-prototypes/README.md). The application and hardware integration are still to be built. The [portable handover](HANDOVER.md) and the preparation material below preserve historical context and may describe earlier locations or repository state.
+The repository includes preparation history, research, the starter scaffold and [interactive concept mockups](05-prototypes/README.md). The application and hardware integration are still to be built. The preparation material below preserves historical context and may describe earlier locations or repository state.
 
 The existing Team-29 LICENSE is the repository's license. Third-party code, data, and basemaps retain their own terms.
 
@@ -23,10 +23,10 @@ Start with a small system that reads one sensor, stores an observation, and show
 2. [Three-hour crash course](02-equipment/crash-course.md): the concepts and one complete data path.
 3. [Software preparation list](04-software/preparation-list.md): essential, conditional and deferred tools, with upstream links.
 4. [Preflight checklist](04-software/preflight-checklist.md): what to prepare, test and ask before arrival.
-5. [Idea shortlist](01-ideas/idea-shortlist.md): five possible projects and honest fallback demos.
+5. [Man-overboard research](03-research/reports/man-overboard-systems.md) covers existing systems, public repositories and prototype feasibility.
 6. [Research synthesis](03-research/reports/Disaster%20response%20hardware%20readiness.md): the main technical decisions and supporting evidence.
 
-[INDEX.md](INDEX.md) links every deliverable and the underlying research. [The project brief](01-ideas/brief.md) preserves the confirmed facts and open questions.
+[INDEX.md](INDEX.md) links every deliverable and the underlying research. The [mission requirements](01-ideas/forge-2026-mission-brief.md) preserve the organizer briefing.
 
 ## Folder map
 

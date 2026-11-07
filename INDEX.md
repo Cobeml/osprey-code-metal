@@ -7,8 +7,6 @@
 - [Open-ocean man-overboard plan and public repositories](01-ideas/open-ocean-mob-plan.md)
 
 - [Saturday mission brief, judging, and submission](01-ideas/forge-2026-mission-brief.md)
-- [Project brief and saved mission](01-ideas/brief.md)
-- [Five project directions](01-ideas/idea-shortlist.md)
 
 ## 02 Equipment
 
@@ -18,6 +16,8 @@
 - [Extracted PDF text](02-equipment/source/equipment-extracted.txt)
 
 ## 03 Research
+
+- [Man-overboard systems, public repositories, and feasibility](03-research/reports/man-overboard-systems.md)
 
 - [Disaster response hardware readiness report](03-research/reports/Disaster%20response%20hardware%20readiness.md)
 - [Supporting hardware research](03-research/research_notes/Disaster%20response%20hardware%20readiness/hardware.md)
@@ -39,6 +39,5 @@ The notes retain evidence gaps and source-level detail. The guides and report ar
 ## 05 Prototypes
 
 - [Interactive mockups and limitations](05-prototypes/README.md)
-- [Historical portable handover](HANDOVER.md)
 
 The team repository preserves the original preparation history. The PRD is being developed through a one-question-at-a-time interview. The starter currently contains placeholders.
