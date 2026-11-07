@@ -4,6 +4,9 @@
 
 ## 01 Ideas
 
+- [Open-ocean man-overboard plan and public repositories](01-ideas/open-ocean-mob-plan.md)
+
+- [Saturday mission brief, judging, and submission](01-ideas/forge-2026-mission-brief.md)
 - [Project brief and saved mission](01-ideas/brief.md)
 - [Five project directions](01-ideas/idea-shortlist.md)
 
