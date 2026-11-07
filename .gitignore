@@ -46,3 +46,6 @@ models/
 *.sqlite
 *.sqlite3
 *.db
+
+# Local hardware captures (may contain people)
+hardware-checks/
