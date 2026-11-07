@@ -24,6 +24,7 @@ from .geo import LatLon, ShipPose, latlon_to_enu
 from .incident import IncidentEngine
 from .nodes.aurora import AuroraNode
 from .nodes.sim import SimScout, SimShipCam
+from .nodes.ws_ingest import ScoutIngest
 from .perception.detector import make_detector
 from .scenario import Scenario
 from .shipcam import RailTrigger
@@ -73,6 +74,7 @@ class Ground:
         self.detector = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.aurora = AuroraNode(self, settings.aurora_mode, settings.aurora_flip)
+        self.scouts = ScoutIngest(self)
         self.last_ship_dets: list[dict] = []
         self.calib_path = rt / "calibration.json"
         if self.calib_path.exists():
@@ -86,6 +88,7 @@ class Ground:
         self.detector = await asyncio.to_thread(make_detector, self.s.detector, self.s.hef_path)
         log.warning("detector: %s", type(self.detector).__name__ if self.detector else "none")
         self.tasks.append(asyncio.create_task(self.aurora.run()))
+        self.tasks += self.scouts.start(("A", "B"))
         self.tasks.append(asyncio.create_task(self._state_loop()))
         self.tasks.append(asyncio.create_task(self._sim_loop()))
 
@@ -248,6 +251,9 @@ class Ground:
             n["label"] = NODE_LABELS.get(nid, nid)
             n["source"] = self.sources.get(nid, "?")
             n["fps"] = round(len(self.fps.get(nid, [])) / 2.0, 1)
+            if nid in self.scouts.stats:
+                n["link"] = self.scouts.stats[nid]
+            n["connected"] = nid in self.scouts.conns if nid != "ship" else None
         snap["drift"] = self.drift_view
         snap["ship"] = {"lat": self.ship.lat, "lon": self.ship.lon, "heading": self.ship.heading_deg,
                         "label": "simulated ship position"}
@@ -370,7 +376,15 @@ def index():
 
 @app.get("/scout")
 def scout_page():
-    return RedirectResponse("/static/scout.html")
+    return FileResponse(WEB / "scout.html", headers={"Cache-Control": "no-store"})
+
+
+@app.websocket("/ws/scout")
+async def ws_scout(ws: WebSocket, node: str = "B"):
+    if node not in ("A", "B"):
+        await ws.close()
+        return
+    await ground.scouts.serve(ws, node)
 
 
 @app.get("/api/state")

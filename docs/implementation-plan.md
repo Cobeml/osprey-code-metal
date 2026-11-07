@@ -157,13 +157,13 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - Done when: walking past the tape on the real camera opens the incident within 2 s, with the trigger frame and overboard point shown. Record trigger latency in `docs/results.md`.
 
 ### Phase 4 — Phone scout via tunnel (1.5 h) [H2]
-- [ ] `web/scout.html`: choose node (A/B), `getUserMedia` (rear camera, 640×480), canvas → JPEG q≈0.7 at 10 fps → WSS, clock pings, on-screen status.
-- [ ] `nodes/ws_ingest.py` with bounded latest-frame queues; scouts run through the detector.
+- [x] `web/scout.html`: choose node (A/B), `getUserMedia` (rear camera, 640×480), canvas → JPEG q≈0.7 at 10 fps → WSS, clock pings, on-screen status.
+- [x] `nodes/ws_ingest.py` with bounded latest-frame queues; scouts run through the detector.
 - [ ] `scripts/measure_latency.py` or an on-screen timestamp method; record fps and latency.
 - Done when: the phone feed shows live boxes on the coordinator at ≥ 10 fps and its latency is recorded.
 
 ### Phase 5 — Outage and recovery (1 h) [none; cable-pull test needs the user present]
-- [ ] Browser local aging, LINK LOST overlay, reconnect snapshot-then-history, software outage toggle.
+- [x] Browser local aging, LINK LOST overlay, reconnect snapshot-then-history, software outage toggle.
 - [ ] Test: pull the Mac Ethernet for 5 s during tracking. Ground keeps tracking and archiving, the display recovers in ≤ 3 s, and history fills the gap without rewinding.
 - Done when: V-02/V-05 behavior has been shown live and timing is recorded.
 

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Osprey Scout</title>
+<style>
+  :root { --bg:#0d1117; --text:#e6edf3; --muted:#8b949e; --green:#1a7f37; --red:#d1242f; --amber:#bf8700; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system,Segoe UI,Helvetica,Arial,sans-serif; }
+  body { display:flex; flex-direction:column; }
+  #pick { padding:24px 16px; display:flex; flex-direction:column; gap:14px; }
+  #pick h1 { margin:0; font-size:22px; }
+  #pick button { font:inherit; font-size:20px; font-weight:800; padding:18px; border-radius:10px; border:0; color:#fff; background:#21262d; }
+  #pick button.b { background:#6e40c9; } #pick button.a { background:#0969da; }
+  #pick p { color:var(--muted); margin:0; font-size:14px; }
+  #run { display:none; flex:1; flex-direction:column; }
+  #bar { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#161b22; gap:8px; }
+  #pill { padding:4px 12px; border-radius:999px; font-weight:800; background:#30363d; }
+  #pill.TRACKING { background:var(--green); } #pill.CANDIDATE { background:var(--red); } #pill.CONTACT_LOST { background:var(--amber); }
+  #view { position:relative; flex:1; background:#000; }
+  video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+  #stats { padding:8px 12px; font-size:13px; color:var(--muted); background:#161b22; font-variant-numeric:tabular-nums; }
+  #err { color:#ff7b72; padding:12px; }
+</style>
+</head>
+<body>
+<div id="pick">
+  <h1>Osprey scout camera</h1>
+  <p>Streams this camera to the ground processor. Keep the page open and the screen on.</p>
+  <button class="b" data-node="B">Scout B (phone)</button>
+  <button class="a" data-node="A">Scout A</button>
+  <div id="err"></div>
+</div>
+<div id="run">
+  <div id="bar"><b id="who"></b><span id="pill">CONNECTING</span><span id="phase"></span></div>
+  <div id="view"><video id="v" playsinline muted autoplay></video></div>
+  <div id="stats"></div>
+</div>
+<canvas id="c" width="640" height="480" hidden></canvas>
+<script>
+"use strict";
+const FPS = 10, W = 640, H = 480, Q = 0.7;
+let ws, node, session = Math.random().toString(36).slice(2, 10), seq = 0, sent = 0, sentTimes = [], lastStatus = {};
+const $ = (s) => document.querySelector(s);
+
+document.querySelectorAll("#pick button").forEach((b) => (b.onclick = () => start(b.dataset.node)));
+
+async function start(n) {
+  node = n;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: W }, height: { ideal: H } }, audio: false });
+    $("#v").srcObject = stream;
+  } catch (e) {
+    $("#err").textContent = "Camera not available: " + e.message + " (the page must be opened over https)";
+    return;
+  }
+  $("#pick").style.display = "none";
+  $("#run").style.display = "flex";
+  $("#who").textContent = "Scout " + node;
+  connect();
+  setInterval(capture, 1000 / FPS);
+  setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ ping: Date.now() })); }, 1000);
+  setInterval(render, 250);
+  try { await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/scout?node=" + node);
+  ws.binaryType = "arraybuffer";
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.pong !== undefined) ws.send(JSON.stringify({ sync: m.pong, srv: m.srv, recv: Date.now() }));
+    else if (m.type === "status") lastStatus = m;
+  };
+  ws.onclose = () => setTimeout(connect, 1000);
+}
+
+function capture() {
+  const v = $("#v");
+  if (!ws || ws.readyState !== 1 || !v.videoWidth) return;
+  if (ws.bufferedAmount > 200000) return; // latest-only: drop frames while the link is slow
+  const c = $("#c"), ctx = c.getContext("2d");
+  const s = Math.min(W / v.videoWidth, H / v.videoHeight);
+  const w = Math.round(v.videoWidth * s), h = Math.round(v.videoHeight * s);
+  c.width = w; c.height = h;
+  const ts = Date.now();
+  ctx.drawImage(v, 0, 0, w, h);
+  c.toBlob(async (blob) => {
+    const header = new TextEncoder().encode(JSON.stringify({ node_id: node, session_id: session, seq: ++seq, capture_ts_ms: ts, width: w, height: h }));
+    const buf = new Uint8Array(4 + header.length + blob.size);
+    new DataView(buf.buffer).setUint32(0, header.length, true);
+    buf.set(header, 4);
+    buf.set(new Uint8Array(await blob.arrayBuffer()), 4 + header.length);
+    if (ws.readyState === 1) { ws.send(buf); sentTimes.push(performance.now()); }
+  }, "image/jpeg", Q);
+}
+
+function render() {
+  const t = performance.now();
+  sentTimes = sentTimes.filter((x) => t - x < 2000);
+  const up = ws && ws.readyState === 1;
+  const p = $("#pill");
+  p.textContent = up ? (lastStatus.pill || "LIVE") : "RECONNECTING";
+  p.className = (lastStatus.pill || "").replace(" ", "_");
+  $("#phase").textContent = lastStatus.following ? "following" : (lastStatus.phase || "");
+  $("#stats").textContent = `sent ${(sentTimes.length / 2).toFixed(1)} fps · ground ${lastStatus.proc_fps ?? "–"} fps · ` +
+    `clock ${lastStatus.clock || "–"} rtt ${lastStatus.rtt_ms ?? "–"} ms · detect ${lastStatus.detect_ms ?? "–"} ms`;
+}
+</script>
+</body>
+</html>
