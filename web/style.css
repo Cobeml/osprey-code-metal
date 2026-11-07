@@ -5,12 +5,12 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-body { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; overflow: hidden; }
+body { display: grid; grid-template-rows: auto auto 1fr auto; height: 100vh; overflow: hidden; }
 
 #banner { display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
   padding: 12px 20px; background: var(--grey); transition: background .3s; }
-#banner .phase { font-size: 28px; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
-#banner #subtitle { font-size: 17px; opacity: .95; }
+#banner .phase { font-size: clamp(20px, 2.1vw, 30px); font-weight: 800; letter-spacing: .5px; }
+#banner #subtitle { font-size: clamp(14px, 1.2vw, 18px); opacity: .95; }
 #banner .right { display: flex; gap: 14px; align-items: center; font-size: 18px; font-variant-numeric: tabular-nums; }
 #banner.OVERBOARD { background: var(--red); }
 #banner.CANDIDATE { background: #a40e26; }
@@ -69,7 +69,7 @@ button.pending { opacity: .6; }
 .chip.lost { background: var(--amber); } .chip.end { background: var(--blue); }
 #hint { color: var(--muted); font-size: 12px; }
 
-#ribbon { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 2000; text-align: center;
+#ribbon { display: none; grid-row: 2; z-index: 2000; text-align: center;
   background: var(--red); color: #fff; font-weight: 800; font-size: 20px; padding: 10px; }
 body.linklost #ribbon { display: block; }
 body.linklost main, body.linklost footer { filter: brightness(.6) saturate(.6); }
@@ -85,3 +85,4 @@ body.linklost main, body.linklost footer { filter: brightness(.6) saturate(.6); 
 .mk-label { background: rgba(13,17,23,.85); color: #fff; border: 1px solid #555; border-radius: 4px;
   padding: 1px 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .leaflet-tooltip.mk-label:before { display: none; }
+#banner { grid-row: 1; } main { grid-row: 3; } footer { grid-row: 4; }

@@ -81,7 +81,7 @@ async function onFrame(buf) {
   const f = feeds[header.node_id] || (feeds[header.node_id] = {});
   if (f.liveHeader && header.capture_ts < f.liveHeader.capture_ts) return; // never rewind
   f.live = bmp; f.liveHeader = header; f.liveAt = performance.now();
-  if (header.boxes.some((b) => b.state === "tracking" || b.state === "candidate" || header.node_id === "ship")) {
+  if (header.node_id === "ship" || header.boxes.some((b) => b.state === "tracking" || b.state === "candidate")) {
     f.grab = bmp; f.grabHeader = header;
   }
 }
@@ -310,7 +310,7 @@ function renderFeeds() {
       } else {
         ctx.fillStyle = "#8b949e"; ctx.font = "bold 26px sans-serif"; ctx.fillText("NO VIDEO", cv.width / 2 - 70, cv.height / 2);
       }
-      const seen = ns && ns.last_accepted ? ns.last_accepted.capture_ts : hdr ? hdr.capture_ts : null;
+      const seen = ns && ns.last_accepted ? ns.last_accepted.capture_ts : f.liveHeader ? f.liveHeader.capture_ts : null;
       ageText = seen ? `${ns && ns.last_accepted ? "person" : "video"} last seen ${fmtAge(t - seen)} ago` : "";
     }
     tile.querySelector(".age").textContent = ageText;
@@ -361,7 +361,7 @@ function renderBanner() {
   lk.className = "pill " + (linkUp ? "ok" : "bad");
   if (!snap) return;
   b.className = snap.phase;
-  $("#phase-text").textContent = PHASE_TEXT[snap.phase] || snap.phase;
+  $("#phase-text").textContent = (PHASE_TEXT[snap.phase] || snap.phase) + (linkUp ? "" : " (last known)");
   $("#subtitle").textContent = subtitle();
   const inc = snap.incident;
   if (inc && !inc.ended) $("#inc-timer").textContent = "incident " + fmtAge(nowS() - inc.opened_ts).replace(" min ", ":").replace(" s", "");

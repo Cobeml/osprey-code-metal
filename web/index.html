@@ -5,10 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Osprey MOB Coordinator</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{v}}">
 </head>
 <body>
-<div id="ribbon">Link to ground processor lost — showing last received data</div>
 <header id="banner" class="STANDBY">
   <div class="phase"><span class="dot">●</span> <span id="phase-text">CONNECTING…</span></div>
   <div id="subtitle">Waiting for the ground processor.</div>
@@ -17,6 +16,7 @@
     <span id="link" class="pill">LINK …</span>
   </div>
 </header>
+<div id="ribbon">Link to ground processor lost — showing last received data</div>
 <main>
   <section id="chart-wrap">
     <div id="chart"></div>
@@ -67,6 +67,6 @@
   <div id="stats"></div>
 </aside>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{v}}"></script>
 </body>
 </html>

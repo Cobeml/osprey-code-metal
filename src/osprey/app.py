@@ -360,6 +360,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Osprey", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    resp = await call_next(request)
+    if request.url.path.startswith("/static"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 WEB = ROOT / "web"
 
 
@@ -369,9 +377,15 @@ def health():
             "server_ts": ground.clock.now()}
 
 
+BOOT = str(int(time.time()))
+
+
 @app.get("/")
 def index():
-    return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-store"})
+    from fastapi.responses import HTMLResponse
+
+    html = (WEB / "index.html").read_text().replace("{{v}}", BOOT)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/scout")
