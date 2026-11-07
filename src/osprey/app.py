@@ -20,6 +20,7 @@ from .config import ROOT, Settings
 from .contracts import Command, Detection, FrameReport, Location
 from .drift import DriftEstimator, Forcing
 from .gateway import Gateway
+from .follow import FollowController
 from .geo import LatLon, ShipPose, latlon_to_enu
 from .incident import IncidentEngine
 from .nodes.aurora import AuroraNode
@@ -75,6 +76,7 @@ class Ground:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.aurora = AuroraNode(self, settings.aurora_mode, settings.aurora_flip)
         self.scouts = ScoutIngest(self)
+        self.follow = FollowController()
         self.last_ship_dets: list[dict] = []
         self.calib_path = rt / "calibration.json"
         if self.calib_path.exists():
@@ -195,6 +197,12 @@ class Ground:
                           "candidate_id": cid if st == "candidate" else None,
                           "confidence": round(d["confidence"], 2),
                           "z_m": round(d["z_m"], 2) if d.get("z_m") is not None else None})
+        if node_id == "A" and source == "ws":
+            tb = next((b["bbox"] for b in boxes if b["state"] == "tracking"), None)
+            msg = self.follow.on_frame(self.engine.following("A"), self.engine.follow_enabled, tb,
+                                       capture_ts, now)
+            if msg:
+                self.scouts.send("A", msg)
         header = {"node_id": node_id, "seq": seq, "capture_ts": capture_ts,
                   "received_ts": received_ts, "width": width, "height": height,
                   "boxes": boxes, "source": source}

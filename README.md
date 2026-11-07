@@ -20,9 +20,53 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 - [Hardware setup](docs/hardware-setup.md): bring-up steps for the team
 - [Research](docs/research.md) · [Event constraints](docs/event-constraints.md)
 
+## Run it
+
+Everything runs on the Pi; the Mac only edits, deploys and displays. From the Mac, in this repo:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+```
+
+```bash
+.venv/bin/pytest -q
+```
+
+```bash
+scripts/deploy.sh --restart
+```
+
+Then open `http://169.254.50.2:8000` on the Mac (wired link). Press **D** for the demo drawer.
+
+Play the whole story with simulated feeds and check every phase (prints a timing table):
+
+```bash
+.venv/bin/python scripts/sim_story.py http://169.254.50.2:8000
+```
+
+Control from the terminal (`state`, `demo_start`, `confirm`, `end_incident`, `set_rail rail_m=1.6`, …):
+
+```bash
+.venv/bin/python scripts/ctl.py state
+```
+
+Real hardware:
+
+| Piece | Command |
+|---|---|
+| Hardware check on the Pi | `ssh mob-pi 'cd ~/osprey && python3 scripts/check_hardware.py'` |
+| Build the Aurora bridge (once, on the Pi) | `ssh mob-pi '~/osprey/native/aurora/build.sh'` |
+| Deck camera on | `.venv/bin/python scripts/ctl.py demo_source node=ship source=aurora` (or `source_ship: aurora` in `config.yaml`) |
+| Calibrate the rail | stand on the tape, read `curl -s 169.254.50.2:8000/api/calibration`, then `scripts/ctl.py set_rail rail_m=<z>` |
+| Phone scout | `ssh mob-pi '~/osprey/scripts/tunnel.sh'`, open the printed URL on the phone, pick Scout B |
+| Measure outage recovery | `.venv/bin/python scripts/measure_outage.py --inject 5` (or `--watch 60` and pull the cable) |
+| Server log | `ssh mob-pi '~/osprey/scripts/run_pi.sh log'` |
+
+Settings live in `src/osprey/config.py`; override them in `config.yaml` at the repo root or with `OSPREY_<NAME>` environment variables. Measured numbers are in [docs/results.md](docs/results.md); the run order for judges is in [docs/demo-script.md](docs/demo-script.md).
+
 ## Status
 
-Hardware verified Nov 7: Pi 5, Hailo-8, and the Aurora 930 streaming RGB/IR/depth. Software is in progress; run commands will be added here as they work.
+Done: the fully simulated demo (Phase 2), the real deck-camera pipeline (Aurora + Hailo at ~14 fps), the phone scout page and ingest, outage injection and recovery, and drift with published PIW leeway coefficients. Pending: rail calibration on the mounted camera, the tunnel test with the phone, the TurboPi client, and the Open-Meteo snapshot.
 
 ## Licensing
 
