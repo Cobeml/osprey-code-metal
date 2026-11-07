@@ -97,11 +97,8 @@ def test_tunnel_only_exposes_scout(client):
     assert client.get("/", headers={"host": "169.254.50.2:8000"}).status_code == 200
 
 
-def test_dispatch_needs_a_confirmed_sighting(client):
+def test_rover_launches_on_mob_and_gets_fix_on_confirm(client):
     cmd(client, "end_incident")
-    cmd(client, "manual_mob")
-    a = cmd(client, "dispatch")
-    assert not a["ok"] and "confirm" in a["message"]
     g = client.ground
     plan = g.dispatch_plan()
     assert plan["basis"].startswith("default")
@@ -110,4 +107,20 @@ def test_dispatch_needs_a_confirmed_sighting(client):
     assert plan["basis"].startswith("deck-camera")
     assert plan["heading_deg"] == pytest.approx(26.6, abs=0.1)
     assert plan["distance_m"] == pytest.approx(2.236 - 0.4, abs=0.01)
+    g.ship_ball = None
+    assert cmd(client, "manual_mob")["ok"]
+    ds = g.dispatch_state
+    assert ds and ds["status"] == "dispatched" and ds["handoff"] is None
+    assert not cmd(client, "dispatch")["ok"]  # no manual dispatch any more
+    # confirm a drone sighting -> its fix is handed to the rover
+    from osprey.incident import Sighting
+    la = g.ship.camera_point(0.0, 30.0)
+    from osprey.contracts import Location
+    s = Sighting("t:1", "A", "sA", 1, time.time(), 1, (0.4, 0.4, 0.5, 0.5), 0.9,
+                 Location(lat=la.lat, lon=la.lon, provenance="simulated", quality="good"), None)
+    g.engine.last_accepted = s
+    g.handoff_to_rover()
+    h = g.dispatch_state["handoff"]
+    assert h["from_node"] == "A" and h["range_m"] == pytest.approx(30.0, abs=0.5)
     cmd(client, "end_incident")
+    assert g.dispatch_state is None

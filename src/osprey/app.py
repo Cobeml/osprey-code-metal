@@ -104,6 +104,7 @@ class Ground:
 
     # -------------------------------------------------------------- events
     def record(self, events: list[dict]) -> None:
+        launch = handoff = False
         for e in events:
             if not self.store.append(e):
                 continue
@@ -112,6 +113,9 @@ class Ground:
                 loc = e.get("location")
                 self.scenario.on_mob(Location(**loc) if loc else None, e["capture_ts"])
                 self.drift.clear()
+                launch = True
+            elif t == "confirm":
+                handoff = True
             elif t == "end":
                 self.dispatch_state = None
                 self.scenario.end()
@@ -119,6 +123,11 @@ class Ground:
                 self.trigger.reset()
                 self.drift.clear()
             self.gateway.publish_event(e)
+        # follow-ups go out after the events that caused them
+        if launch:
+            self.launch_rover()
+        if handoff:
+            self.handoff_to_rover()
 
     def _history(self) -> list[dict]:
         inc = self.engine.incident
@@ -241,8 +250,9 @@ class Ground:
                 for nid, sc in self.sim_scouts.items():
                     if self.sources[nid] != "sim":
                         continue
-                    if nid == self.rover:  # the rover only searches once dispatched
-                        launched = bool(self.dispatch_state) and now - self.dispatch_state["ts"] >= 4.0
+                    if nid == self.rover:  # sim rover reaches the person only after the drone's fix
+                        ho = self.dispatch_state and self.dispatch_state.get("handoff")
+                        launched = bool(ho) and now - ho["ts"] >= 4.0
                     else:
                         launched = self.scenario.launched(nid, now)
                     visible = self.engine.active and launched and not self.scenario.hidden
@@ -306,15 +316,49 @@ class Ground:
     # -------------------------------------------------------------- rover dispatch
     def dispatch_plan(self) -> dict:
         """Where to send the rover. With a fresh ball fix from the deck camera (real relative
-        geometry) drive to it; otherwise run out a configured distance and search by camera."""
+        geometry) drive to it; else run out along the deck camera's overboard bearing; else a
+        configured default. In every case the rover then searches by camera."""
         b = self.ship_ball
         if b and self.clock.now() - b["ts"] <= 15.0 and b.get("source") == "aurora":
             heading = math.degrees(math.atan2(b["x_m"], b["z_m"]))
             dist = max(0.0, math.hypot(b["x_m"], b["z_m"]) - self.s.dispatch_stop_short_m)
             return {"heading_deg": round(heading, 1), "distance_m": round(dist, 2),
                     "basis": "deck-camera ball fix (real relative)"}
+        inc = self.engine.incident
+        d = inc.detail if inc else {}
+        if d.get("camera") == "aurora" and d.get("z_m"):
+            heading = math.degrees(math.atan2(d.get("x_m") or 0.0, d["z_m"]))
+            return {"heading_deg": round(heading, 1), "distance_m": self.s.dispatch_distance_m,
+                    "basis": "overboard bearing from deck camera (real relative)"}
         return {"heading_deg": self.s.dispatch_heading_deg, "distance_m": self.s.dispatch_distance_m,
                 "basis": "default run-out, then camera search"}
+
+    def launch_rover(self) -> None:
+        """On man overboard the rover launches with the drone, toward the overboard direction."""
+        if not self.engine.active or self.dispatch_state is not None:
+            return
+        now = self.clock.now()
+        plan = self.dispatch_plan()
+        self.dispatch_state = {"ts": now, "status": "dispatched", "plan": plan,
+                               "node": self.rover, "handoff": None}
+        self.scouts.send(self.rover, {"type": "dispatch", **plan})
+        self.record([self.engine._ev("dispatch", now, self.rover, **plan)])  # noqa: SLF001
+
+    def handoff_to_rover(self) -> None:
+        """After the coordinator confirms the drone's sighting, send that fix to the rover."""
+        la = self.engine.last_accepted
+        ds = self.dispatch_state
+        if not ds or ds.get("handoff") or not la or not la.location or la.node_id == self.rover:
+            return
+        now = self.clock.now()
+        x, y = latlon_to_enu(self.ship.origin, LatLon(la.location.lat, la.location.lon))
+        h = {"ts": now, "from_node": la.node_id, "lat": la.location.lat, "lon": la.location.lon,
+             "bearing_deg": round(math.degrees(math.atan2(x, y)) % 360, 1),
+             "range_m": round(math.hypot(x, y), 1), "provenance": la.location.provenance}
+        ds["handoff"] = h
+        # the TurboPi keeps its run-out + camera search; the fix is advisory (drone coords are sim)
+        self.scouts.send(self.rover, {"type": "handoff", **h})
+        self.record([self.engine._ev("handoff", now, self.rover, **h)])  # noqa: SLF001
 
     def rover_report(self, state: str) -> None:
         if self.dispatch_state is not None:
@@ -390,22 +434,6 @@ class Ground:
                                                    "rail_row_frac": self.s.rail_row_frac}))
             return {"command_id": cmd.command_id, "ok": True,
                     "message": f"rail at {self.s.rail_m:.2f} m (depth)"}
-        if t == "dispatch":
-            if not self.engine.active:
-                return {"command_id": cmd.command_id, "ok": False, "message": "no active incident"}
-            if self.engine.last_accepted is None:
-                return {"command_id": cmd.command_id, "ok": False,
-                        "message": "confirm a sighting before dispatching the rover"}
-            if self.dispatch_state is not None:
-                return {"command_id": cmd.command_id, "ok": True, "message": "rover already dispatched"}
-            plan = self.dispatch_plan()
-            self.dispatch_state = {"ts": now, "status": "dispatched", "plan": plan,
-                                   "node": self.rover}
-            self.engine.follow_enabled = True
-            self.scouts.send(self.rover, {"type": "dispatch", **plan})
-            self.record([self.engine._ev("dispatch", now, self.rover, **plan)])  # noqa: SLF001
-            return {"command_id": cmd.command_id, "ok": True,
-                    "message": f"rover dispatched: {plan['distance_m']} m at {plan['heading_deg']}° ({plan['basis']})"}
         if t == "demo_source":
             node, src = a.get("node"), a.get("source")
             if node in self.sources and src:

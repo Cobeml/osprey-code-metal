@@ -11,13 +11,12 @@ Before judges arrive (5 min):
 
 | Time | Who | Action | What the judges see |
 |---|---|---|---|
-| 0:00 | Operator | "A ship's deck camera watches the rail." | Grey DECK WATCH banner, ship-cam tile with the rail line |
-| 0:15 | Overboard | Walk from the deck across the tape and keep going | Banner turns red: MAN OVERBOARD; ✕ overboard point; deck-cam grab retained; drift estimate starts growing |
+| 0:00 | Operator | "A ship's deck camera watches the rail." | Navy DECK WATCH status, ship-cam tile with the rail line |
+| 0:15 | Overboard | Walk from the deck across the tape and keep going | Status turns red: MAN OVERBOARD; ✕ overboard point; drone and rover launch automatically (rover pill EN ROUTE, along the deck camera's overboard bearing); drift estimate starts growing |
 | 0:35 | Operator | "Scouts search. Nobody pressed a button." | ESTIMATE area with model/data labels |
 | 0:40 | Pilot | Fly the drone over the water area | Drone tile (LIVE FPV) |
-| 0:50 | Pilot | Bring the green ball into view | Candidate box on the drone feed, CONFIRM button appears |
-| 0:55 | Operator | Click CONFIRM PERSON | Banner green TRACKING; drone sighting marker with age |
-| 1:00 | Operator | Click DISPATCH ROVER | Rover pill EN ROUTE → SEARCHING; it drives out, then scans |
+| 0:50 | Pilot | Bring the green ball into view | Drone feed grows to the top of the column with a candidate box and Confirm / Not a person under it |
+| 0:55 | Operator | Click Confirm person | Status green TRACKING; drift area shrinks onto the drone's fix; "fix → rover" on the timeline (fix is sim coords, advisory to the TurboPi) |
 | 1:15 | — | Rover camera finds the ball | Rover auto-associates (≤ 50 m), APPROACHING, then ON SCENE |
 | 1:25 | Operator | Pull the Mac's Ethernet cable for 5 s (backup: D → Software outage 5 s) | LINK LOST ribbon, dimmed screen, last grabs with ticking ages |
 | 1:35 | Operator | Plug it back in | Current state and live video back in ≤ 3 s, timeline fills with history chips (dashed) |

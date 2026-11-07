@@ -4,70 +4,107 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Osprey MOB Coordinator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="/static/style.css?v={{v}}">
 </head>
 <body>
 <header id="banner" class="STANDBY">
-  <div class="phase"><span class="dot">●</span> <span id="phase-text">CONNECTING…</span></div>
-  <div id="subtitle">Waiting for the ground processor.</div>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+      <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"/>
+      <circle cx="16" cy="16" r="8.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+      <path d="M5 17.5c3.2-1.6 6.4-4.8 11-4.8s7.8 3.2 11 4.8c-3.2-.6-6.6-1.8-11-1.8S8.2 16.9 5 17.5z" fill="currentColor"/>
+      <circle cx="16" cy="16" r="1.8" fill="currentColor"/>
+    </svg>
+    <div class="brand-text"><b>OSPREY</b><small>MOB Coordinator</small></div>
+  </div>
+  <div class="status">
+    <div class="phase"><span class="dot"></span><span id="phase-text">CONNECTING…</span></div>
+    <div id="subtitle">Waiting for the ground processor.</div>
+  </div>
   <div class="right">
-    <span id="inc-timer"></span>
+    <div class="metric"><label>Incident</label><span id="inc-timer">—</span></div>
+    <div class="metric"><label>Time</label><span id="clock">--:--:--</span></div>
     <span id="link" class="pill">LINK …</span>
   </div>
 </header>
-<div id="ribbon">Link to ground processor lost — showing last received data</div>
+<div id="ribbon"><span class="ribbon-dot"></span>Link to ground processor lost — showing last received data</div>
 <main>
   <section id="chart-wrap">
     <div id="chart"></div>
     <div id="estimate-label" class="hidden"></div>
-    <div id="chart-note">Ship position simulated · deck-cam geometry real relative · drone/rover coordinates simulated (no GPS)</div>
+    <div id="legend">
+      <div class="legend-items">
+        <span><i class="lg-ship"></i>Ship</span>
+        <span><i class="lg-mob">✕</i>Overboard point</span>
+        <span><i class="lg-dot" style="--c:var(--blue)"></i>Drone A</span>
+        <span><i class="lg-dot" style="--c:var(--violet)"></i>Rover B</span>
+        <span><i class="lg-cand"></i>Candidate</span>
+        <span><i class="lg-hull"></i>Drift 50 / 90 %</span>
+      </div>
+      <div id="chart-note"><span class="badge">SIM</span><span>Ship position simulated · deck-cam geometry real (relative) · drone/rover coordinates simulated, no GPS</span></div>
+    </div>
   </section>
   <section id="feeds">
-    <div class="tile" data-node="ship"><div class="tile-head"><span class="name">SHIP DECK CAM</span><span class="pill">…</span></div><canvas width="640" height="400"></canvas><div class="age"></div></div>
-    <div class="tile" data-node="A"><div class="tile-head"><span class="name">SCOUT A</span><span class="pill">…</span></div><canvas width="640" height="400"></canvas><div class="age"></div></div>
-    <div class="tile" data-node="B"><div class="tile-head"><span class="name">SCOUT B</span><span class="pill">…</span></div><canvas width="640" height="400"></canvas><div class="age"></div></div>
+    <div class="tile" data-node="ship"><div class="tile-head"><span class="node-id">S</span><span class="name">Ship deck cam</span><span class="sub"></span><span class="src"></span><span class="pill">…</span></div><div class="video"><canvas width="640" height="400"></canvas><div class="age"></div></div></div>
+    <div class="tile" data-node="A"><div class="tile-head"><span class="node-id" style="--c:var(--blue)">A</span><span class="name">Scout A</span><span class="sub"></span><span class="src"></span><span class="pill">…</span></div><div class="video"><canvas width="640" height="400"></canvas><div class="age"></div></div>
+      <div class="decide"><span class="q"></span><button class="big ghost btn-reject">Not a person</button><button class="big green btn-confirm">Confirm person</button></div></div>
+    <div class="tile" data-node="B"><div class="tile-head"><span class="node-id" style="--c:var(--violet)">B</span><span class="name">Scout B</span><span class="sub"></span><span class="src"></span><span class="pill">…</span></div><div class="video"><canvas width="640" height="400"></canvas><div class="age"></div></div>
+      <div class="decide"><span class="q"></span><button class="big ghost btn-reject">Not a person</button><button class="big green btn-confirm">Confirm person</button></div></div>
   </section>
 </main>
 <footer>
   <div id="controls">
-    <button id="btn-confirm" class="big green hidden">CONFIRM PERSON</button>
-    <button id="btn-reject" class="hidden">Not a person</button>
-    <button id="btn-dispatch" class="big blue hidden">DISPATCH ROVER</button>
-    <button id="btn-follow" class="big hidden">STOP FOLLOWING</button>
-    <button id="btn-end" class="big hidden">END INCIDENT</button>
+    <button id="btn-follow" class="big primary hidden">Stop following</button>
+    <button id="btn-end" class="big danger-outline hidden">End incident</button>
     <span id="toast"></span>
   </div>
   <div id="timeline"></div>
-  <div id="hint">D = demo</div>
+  <div id="hint"><kbd>D</kbd> Demo controls</div>
 </footer>
 <aside id="drawer" class="hidden">
-  <h3>Demo controls</h3>
-  <button data-cmd="demo_start">Sim: crew member crosses rail</button>
-  <button data-cmd="manual_mob">Manual MOB</button>
-  <button data-cmd="demo_outage" data-args='{"seconds":5}'>Software outage 5 s</button>
-  <button data-cmd="demo_hide" data-args='{"hidden":true}'>Sim: hide person</button>
-  <button data-cmd="demo_hide" data-args='{"hidden":false}'>Sim: show person</button>
-  <button data-cmd="demo_inject" data-args='{"dist_m":30}'>Reappear 30 m away</button>
-  <button data-cmd="demo_inject" data-args='{"dist_m":80}'>Reappear 80 m away</button>
-  <div class="row">Drift clock:
-    <button data-cmd="demo_speed" data-args='{"multiplier":60}'>60×</button>
-    <button data-cmd="demo_speed" data-args='{"multiplier":300}'>300×</button>
-    <button data-cmd="demo_speed" data-args='{"multiplier":900}'>900×</button>
+  <div class="drawer-head"><h3>Demo controls</h3><span class="drawer-tag">SIMULATION</span><kbd>D</kbd></div>
+  <div class="group">
+    <label>Scenario</label>
+    <button data-cmd="demo_start">Sim: crew member crosses rail</button>
+    <button data-cmd="manual_mob">Manual MOB</button>
+    <button data-cmd="demo_outage" data-args='{"seconds":5}'>Software outage 5 s</button>
+    <div class="seg">
+      <button data-cmd="demo_hide" data-args='{"hidden":true}'>Hide person</button>
+      <button data-cmd="demo_hide" data-args='{"hidden":false}'>Show person</button>
+    </div>
+    <div class="seg">
+      <button data-cmd="demo_inject" data-args='{"dist_m":30}'>Reappear 30 m</button>
+      <button data-cmd="demo_inject" data-args='{"dist_m":80}'>Reappear 80 m</button>
+    </div>
   </div>
-  <div class="row">Sources:
-    <button data-cmd="demo_source" data-args='{"node":"ship","source":"sim"}'>ship sim</button>
-    <button data-cmd="demo_source" data-args='{"node":"ship","source":"aurora"}'>ship Aurora</button>
+  <div class="group">
+    <label>Drift clock</label>
+    <div class="seg">
+      <button data-cmd="demo_speed" data-args='{"multiplier":60}'>60×</button>
+      <button data-cmd="demo_speed" data-args='{"multiplier":300}'>300×</button>
+      <button data-cmd="demo_speed" data-args='{"multiplier":900}'>900×</button>
+    </div>
   </div>
-  <div class="row">Drone A:
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"sim"}'>sim</button>
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"usb"}'>USB rx</button>
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"file"}'>recorded</button>
-    <button data-cmd="demo_source" data-args='{"node":"A","source":"ws"}'>phone</button>
-  </div>
-  <div class="row">Rover B:
-    <button data-cmd="demo_source" data-args='{"node":"B","source":"sim"}'>sim</button>
-    <button data-cmd="demo_source" data-args='{"node":"B","source":"ws"}'>TurboPi/phone</button>
+  <div class="group">
+    <label>Sources</label>
+    <div class="row"><span>Ship</span><div class="seg">
+      <button data-cmd="demo_source" data-args='{"node":"ship","source":"sim"}'>sim</button>
+      <button data-cmd="demo_source" data-args='{"node":"ship","source":"aurora"}'>Aurora</button>
+    </div></div>
+    <div class="row"><span>Drone A</span><div class="seg">
+      <button data-cmd="demo_source" data-args='{"node":"A","source":"sim"}'>sim</button>
+      <button data-cmd="demo_source" data-args='{"node":"A","source":"usb"}'>USB rx</button>
+      <button data-cmd="demo_source" data-args='{"node":"A","source":"file"}'>recorded</button>
+      <button data-cmd="demo_source" data-args='{"node":"A","source":"ws"}'>phone</button>
+    </div></div>
+    <div class="row"><span>Rover B</span><div class="seg">
+      <button data-cmd="demo_source" data-args='{"node":"B","source":"sim"}'>sim</button>
+      <button data-cmd="demo_source" data-args='{"node":"B","source":"ws"}'>TurboPi/phone</button>
+    </div></div>
   </div>
   <div id="stats"></div>
 </aside>
