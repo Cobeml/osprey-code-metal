@@ -259,18 +259,35 @@ def test_pan_search_sweeps_camera_before_spinning_body(monkeypatch):
 
 
 def test_approach_centres_camera_and_body_turns_by_full_bearing(monkeypatch):
-    """One steerer at a time: approaching re-centres the pan and the body turns toward the
-    bearing the pan was holding (pan + body together overshot on the venue rover)."""
+    """Small pan offset: one steerer at a time, the camera centres and the body turns."""
     t = [1000.0]
     r, hw = _pan_rover(monkeypatch, t)
-    r._set_pan(20.0)                         # search sweep found it with the camera 20 deg right
-    r.on_local([box(0.5, 0.5, 0.1)])         # centred in the image -> bearing +20 deg
+    r._set_pan(8.0)                          # just off-axis
+    r.on_local([box(0.5, 0.5, 0.1)])
     r.tick()
     assert r.state == "approaching"
     r.tick()
-    assert r.pan_deg == 0.0                  # camera back to straight ahead
+    assert r.pan_deg == 0.0
     turn = hw.cmds[-1][1]
-    assert sc.APPROACH_MIN_TURN <= turn <= sc.APPROACH_MAX_TURN   # body turns right, bounded
+    assert 0 < turn <= sc.APPROACH_MAX_TURN
+
+
+def test_found_far_off_axis_body_turns_while_camera_holds_the_ball(monkeypatch):
+    """Search sweep found it 40 deg right: snapping the camera back would lose it."""
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(40.0)
+    r.on_local([box(0.5, 0.5, 0.1)])
+    r.tick()
+    r.tick()
+    assert r.state == "approaching" and r.pan_deg == 40.0    # camera stays on the ball
+    assert hw.cmds[-1] == (0.0, sc.APPROACH_MIN_TURN)         # body turns right toward it
+    # as the body turns the ball drifts left in the image and the camera follows it back
+    for _ in range(20):
+        t[0] += 0.1
+        r.on_local([box(0.4, 0.5, 0.1)])
+        r.tick()
+    assert r.pan_deg == 0.0                                   # handed over to the body
 
 
 def test_no_turn_on_a_stale_sighting(monkeypatch):

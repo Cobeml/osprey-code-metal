@@ -98,7 +98,9 @@ APPROACH_TURN_GAIN = 0.5  # turns ~3x faster than first assumed: was 1.2 and ove
 APPROACH_MAX_TURN = 0.2
 APPROACH_MIN_TURN = 0.12  # below this the motors don't move the body (trace: 0.145 turns it)
 APPROACH_TURN_DEADBAND = 0.05
-TURN_FRESH_S = 0.25       # only turn on a sighting this recent; blurred frames pause the turn
+TURN_FRESH_S = 0.4        # only turn on a sighting this recent; blurred frames pause the turn
+PAN_HANDOFF_DEG = 10.0    # camera found the ball further off-axis than this: body turns toward
+                          # the camera's angle while the camera keeps the ball in view
 APPROACH_ALIGN_ERR = 0.15  # turn in place until the target is within this of centre
 APPROACH_SPEED = 0.6       # fraction of DRIVE_SPEED while approaching
 HOLD_DEADBAND = 0.08      # while arrived, turn to re-centre when the ball is off-centre by more
@@ -555,12 +557,20 @@ class Rover:
                 self.hw.stop()
                 self.set("arrived")
                 return
+            ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
+            fresh_turn = now - ts <= TURN_FRESH_S
+            if abs(self.pan_deg) > PAN_HANDOFF_DEG:
+                # the search sweep found it off-axis: snapping the camera back would lose it.
+                # Camera keeps the ball centred; the body turns toward the camera's angle (not the
+                # image error, so the two don't fight) until it has caught up.
+                self._track_pan(guide["err"][0], ts)
+                turn = APPROACH_MIN_TURN if self.pan_deg > 0 else -APPROACH_MIN_TURN
+                self.hw.drive(0.0, turn if fresh_turn else 0.0)
+                return
             if self.pan_deg != 0.0:
                 # one steerer at a time: centre the camera (the lock window follows) and let the
                 # body turn by the full bearing; pan + body together overshot and oscillated
                 self._set_pan(0.0)
-            ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
-            fresh_turn = now - ts <= TURN_FRESH_S
             if abs(b) > APPROACH_ALIGN_ERR:   # well off-centre: turn in place (needs the minimum)
                 self.hw.drive(0.0, self._body_turn(b) if fresh_turn else 0.0)
             else:                             # roughly centred: drive and steer gently (no minimum)
