@@ -80,9 +80,15 @@ class NoHardware:
         print("stop")
 
 
+# Pan servo direction. At the venue the pan turned left when commanded right (tilt was fine), so
+# the sign is flipped where logical pan becomes a servo pulse. Set to +1 if a re-mount fixes it.
+PAN_SIGN = -1
+
+
 class HiwonderHardware(NoHardware):
     """Chassis + pan-tilt through the Hiwonder SDK. Filled in after inspecting the TurboPi image
-    (H3); the exact modules and calls are not known yet, so this raises until verified."""
+    (H3); the exact modules and calls are not known yet, so this raises until verified.
+    When implemented, move() must send PAN_SIGN * pan to the pan servo."""
 
     def __init__(self):
         super().__init__()
