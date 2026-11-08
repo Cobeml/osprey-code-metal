@@ -1,7 +1,8 @@
 """Scout A follow commands (FR-11/FR-13).
 
-Sent only while the incident is active, following is enabled and Scout A holds the confirmed
-target. The message carries the normalized error of the target box center from the frame center;
+Follow errors are sent while the incident is active, following is enabled and the rover holds
+the confirmed target. "stop" is sent only when following is disabled (Stop following, or no
+active incident); while the rover searches on its own camera lock after launch, nothing is sent. The message carries the normalized error of the target box center from the frame center;
 the rover runs its own rate-limited P loop on the pan-tilt servos and holds when commands go stale
 (> 1 s, e.g. visual loss or link loss). Stop always wins.
 """
@@ -24,9 +25,12 @@ class FollowController:
             self._last_kind = "follow"
             return {"type": "follow", "err": [round(ex, 4), round(ey, 4)],
                     "size": round(y2 - y1, 4), "capture_ts": capture_ts}
-        kind = "hold" if following else "stop"
         if not follow_enabled:
-            kind = "stop"
+            kind = "stop"          # coordinator stopped following, or no active incident
+        elif following:
+            kind = "hold"          # confirmed target, box momentarily missing
+        else:
+            return None            # rover searching on its own lock after launch: don't stop it
         if kind != self._last_kind or now - self._last_idle >= self.idle_period_s:
             self._last_kind = kind
             self._last_idle = now
