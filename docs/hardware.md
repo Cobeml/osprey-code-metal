@@ -50,8 +50,25 @@ MacBook Air (M1, 8 GB)                         Raspberry Pi 5 (16 GB), hostname 
 | `/dev/ttyUSB0` | Seeeduino v4.2 (ATmega328P, sig `1e950f`) via CP2102N, on Sabrent hub | Optiboot at 115200 responds; current sketch prints nothing; no Grove sensors attached |
 | — | XIAO ESP32-C5 | Powers on (charge LED) but never enumerates on any port: almost certainly a charge-only cable. Expect `303a:*` on `/dev/ttyACM0` once a data cable is used |
 
+## TurboPi rover (Scout B), verified Nov 8 ~02:50
+
+- Raspberry Pi 5 running Hiwonder's Pi 5 / ROS 2 image (Debian 12, Python 3.11.2, OpenCV 4.6).
+  `ssh turbopi` = `pi@169.254.50.3` (key `id_ed25519_cobeml`, passwordless sudo). Its eth0
+  "Wired connection 1" had no IPv4 and kept dropping; set to manual `169.254.50.3/16`,
+  ipv6 link-local. Its wlan0 is Hiwonder's own hotspot (`hiwonder-ap`, 192.168.149.1); no internet.
+- No host `HiwonderSDK`: the board is `~/board_demo/ros_robot_controller_sdk.py` on `/dev/rrc`
+  (= `ttyAMA0`, 1 Mbaud). `turbopi/HiwonderSDK/` is our shim over it (chassis + pan servo).
+- Hiwonder's ROS 2 container (`turbopi`, started by `start_node.service`) holds `/dev/ttyAMA0`
+  and `/dev/video0`: stop it before running our client (`sudo systemctl stop start_node;
+  docker stop turbopi`); it comes back on reboot (`docker start turbopi` to restore sooner).
+- Self-test passed: forward, backward, spin clockwise and anticlockwise all correct
+  (`set_velocity` yaw > 0 = clockwise). Pan = PWM servo 1 (servo 2 tilts); a lower pulse turns
+  the camera to the rover's right, so pan-sign -1. Camera 640x480 on `/dev/video0`.
+- Battery 7.58 V at 02:30 (2S pack: 8.4 V full, ~6.8 V low). No RTC/NTP: the clock was 89 days
+  behind; set from the Mac with `sudo date -s @<epoch>` (repeat after a reboot).
+- websockets 17.4 copied from the Mac venv into `~/osprey-rover/` (pure Python fallback).
+
 ## Not yet set up
 
-- TurboPi rover (Scout A).
 - Phone scout: `cloudflared` 2026.10.7 installed on the Pi (arm64 .deb from Cloudflare GitHub releases, sha256 d9407eb6…6bf836); tunnel not yet tested with the phone.
 - Any aircraft.
