@@ -363,6 +363,10 @@ class IncidentEngine:
         return any(n.last_accepted is not None and is_fresh(n.last_accepted.capture_ts, now)
                    for n in self.nodes.values())
 
+    def any_contact(self) -> bool:
+        """Some camera currently holds visual contact (tracking and not lost)."""
+        return any(n.has_target and not n.lost for n in self.nodes.values())
+
     def phase(self, now: Optional[float] = None) -> Phase:
         now = self.clock.now() if now is None else now
         if self.incident is None:

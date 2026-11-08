@@ -326,7 +326,9 @@ function renderChart() {
     setLatLngs(layers.hull50, d.hull50);
     drawSet(d.seed, d.centroid);
     lab.classList.remove("hidden");
-    lab.innerHTML = `<h4>Drift search area <span class="badge">ESTIMATE</span></h4><dl>` +
+    const lostHdr = d.seed_kind === "sighting"
+      ? `<div class="lost-note">Contact lost ${fmtAge(t - d.seed_ts)} ago · area expanding from Scout ${d.seed_node}'s last sighting</div>` : "";
+    lab.innerHTML = `<h4>Drift search area <span class="badge">ESTIMATE</span></h4>${lostHdr}<dl>` +
       `<dt>Model</dt><dd>${d.model}</dd><dt>Forcing</dt><dd>${d.forcing}</dd>` +
       `<dt>Seeded from</dt><dd>${d.seed_kind === "overboard" ? "Overboard point" : "Last sighting (" + d.seed_node + ")"}</dd>` +
       `<dt>Scenario</dt><dd>+${fmtAge(d.sim_elapsed_s)} · clock ${d.multiplier}×</dd>` +

@@ -111,6 +111,22 @@ def test_story_phases():
     assert ack.ok and r.eng.phase() == "ENDED"
 
 
+def test_contact_drops_at_visual_loss_before_fix_goes_stale():
+    """The search area starts expanding at visual loss (1.5 s), before the 6 s phase rule."""
+    r = Rig()
+    r.mob()
+    r.frame("A", [det(1, location=loc(10))])
+    r.run("confirm", candidate_id=r.candidates("A")[0])
+    assert r.eng.any_contact()
+    r.clock.advance(2)
+    r.eng.tick()
+    assert r.eng.nodes["A"].lost and not r.eng.any_contact()
+    assert r.eng.phase() == "TRACKING"           # last fix still fresh (< 6 s)
+    assert r.eng.drift_seed()["kind"] == "sighting"
+    r.frame("A", [det(1, location=loc(12))])     # seen again -> contact, area suspended
+    assert r.eng.any_contact()
+
+
 def test_drift_seed_from_overboard_before_contact():
     r = Rig()
     r.mob(x=2.0)

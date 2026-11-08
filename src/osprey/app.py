@@ -39,6 +39,7 @@ if hasattr(signal, "SIGUSR1"):  # POSIX only; lets the app also run on a Windows
     faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
 
 EVIDENCE_MIN_PERIOD_S = 0.5
+DRIFT_PERIOD_S = 0.5   # drift estimate refresh: twice a second so the area visibly grows
 
 
 class Ground:
@@ -287,12 +288,14 @@ class Ground:
                 self.record(self.engine.tick())
                 self.capture.ensure()
                 now = self.clock.now()
-                fresh = self.engine.any_fresh(now)
-                self.sclock.set_fast(self.engine.active and not fresh)
-                if now - last_drift >= 1.0:
+                # the search area starts expanding the moment no camera holds visual contact
+                # (visual loss, 1.5 s), not only once the last fix is stale (6 s, phase rule)
+                contact = self.engine.any_contact()
+                self.sclock.set_fast(self.engine.active and not contact)
+                if now - last_drift >= DRIFT_PERIOD_S:
                     last_drift = now
                     self.drift_view = await asyncio.to_thread(
-                        self.drift.update, self.engine.drift_seed(), fresh, self.sclock.sim_at,
+                        self.drift.update, self.engine.drift_seed(), contact, self.sclock.sim_at,
                         self.sclock.multiplier, now)
                 self.gateway.publish_state(self.state())
             except Exception:  # noqa: BLE001
