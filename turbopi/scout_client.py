@@ -87,13 +87,13 @@ STALE_S = 1.0             # a sighting or follow error older than this does not 
 # timed dead reckoning: calibrate on the floor at the venue with --selftest and a tape measure
 DRIVE_SPEED = 0.5         # fraction of max
 DRIVE_M_PER_S = 0.25      # measured ground speed at DRIVE_SPEED
-TURN_DEG_PER_S = 90.0     # measured spin rate at turn=0.5
-SEARCH_TURN = 0.25
+TURN_DEG_PER_S = 280.0    # venue TurboPi: ~170 deg/s at turn=0.3 (camera-measured, rough; it coasts)
+SEARCH_TURN = 0.2
 EXTRA_SEARCH_M = 1.0      # keep driving this far past the dispatch distance before spinning
 LOST_TO_SEARCH_S = 3.0    # lost target this long while approaching -> search again
 LOCK_GATE = 0.25          # max box-centre jump (fraction of frame) that still counts as the lock
-APPROACH_TURN_GAIN = 1.2
-APPROACH_MAX_TURN = 0.4
+APPROACH_TURN_GAIN = 0.5  # turns ~3x faster than first assumed: was 1.2 and overshot
+APPROACH_MAX_TURN = 0.25
 APPROACH_ALIGN_ERR = 0.25  # turn in place until the target is within this of centre
 APPROACH_SPEED = 0.6       # fraction of DRIVE_SPEED while approaching
 HOLD_DEADBAND = 0.08      # while arrived, turn to re-centre when the ball is off-centre by more
@@ -110,7 +110,7 @@ PAN_MAX_STEP_DEG = 6.0    # per tick (~10 Hz)
 PAN_DEADBAND_DEG = 2.0
 PAN_SWEEP_DEG = 70.0      # search sweep half-width
 PAN_SWEEP_DEG_PER_S = 60.0
-SEARCH_SPIN_S = 1.5       # after a full sweep with nothing seen, spin the body this long
+SEARCH_SPIN_S = 0.35      # after a full sweep with nothing seen, spin the body this long (~50 deg)
 ARRIVED_BODY_DEG = 20.0   # while arrived, the body re-turns once the pan is past this
 
 
