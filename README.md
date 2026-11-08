@@ -4,6 +4,12 @@ Team 29, CodeMetal Forge 2026.
 
 **Landing page:** [`index.html`](index.html) runs the 3D mission simulation in the page, with the recorded Osprey MOB Coordinator run below it. Serve the repo root to view it locally: `python3 -m http.server 8088 --bind 127.0.0.1`, then open `http://127.0.0.1:8088/`.
 
+### Demo video (real hardware run)
+
+[![Osprey demo: the drone feed flags the green ball as the candidate and rejects the red decoy (click for the 88 s video with sound)](docs/media/osprey-demo.jpg)](videos/osprey-demo-web.mp4)
+
+Click the still for the 88 s demo with sound. The outside camera is intercut with the live coordinator screen recording, and the audio is the outside camera's. The deck camera arms on the green ball (the stand-in for a person in the water). When the ball goes over, the coordinator opens a man-overboard incident and shows the drift search area. The drone feed then flags the green ball and ignores the red decoys, and the rover drives to it. Built with [`videos/edit_demo.sh`](videos/edit_demo.sh).
+
 ### Mission simulation (concept)
 
 Interactive, runs in the browser: [`simulation/`](simulation/README.md). Scripted sightings, illustrative vehicles, compressed scenario time.
