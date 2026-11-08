@@ -219,8 +219,10 @@ class IncidentEngine:
             node.input_lost = False
             events.append(self._ev("input_restored", r.capture_ts, r.node_id))
 
-        if self.incident is None or r.node_id == "ship":
+        if self.incident is None:
             return events
+        if r.node_id == "ship":
+            return events + self._ship_fix(node, r)
         if self.incident.ended:
             if r.detections:
                 events += self._archive_late(r, "after end")
@@ -250,6 +252,20 @@ class IncidentEngine:
                 continue
             events += self._candidate(node, cid, s, reason, dist)
         return events
+
+    def _ship_fix(self, node: NodeState, r: FrameReport) -> list[dict]:
+        """Deck camera: a colour-classified target with measured depth is a real (relative) fix,
+        so it is accepted directly and pins the search area next to the ship."""
+        if self.incident.ended:
+            return []
+        dets = [d for d in r.detections if d.location is not None]
+        if not dets:
+            return []
+        d = max(dets, key=lambda d: d.confidence)
+        s = Sighting(f"{r.node_id}:{r.session_id}:{r.seq}:{d.track_id}", r.node_id, r.session_id,
+                     r.seq, r.capture_ts, d.track_id, tuple(d.bbox), d.confidence, d.location,
+                     r.image_ref)
+        return self._accept(node, s, "deck camera fix (colour + measured depth)", None)
 
     def _decide(self, node: NodeState, d: Detection) -> tuple[bool, str, Optional[float]]:
         if node.has_target and not node.lost:
@@ -387,8 +403,10 @@ class IncidentEngine:
     def node_pill(self, node: NodeState, now: float) -> str:
         if node.last_capture_ts is None or node.input_lost or now - node.last_capture_ts > INPUT_LOSS_S:
             return "NO VIDEO"
-        if not self.active or node.node_id == "ship":
+        if not self.active:
             return "LIVE"
+        if node.node_id == "ship":
+            return "TRACKING" if node.has_target and not node.lost else "LIVE"
         if node.candidates:
             return "CANDIDATE"
         if node.has_target and not node.lost:

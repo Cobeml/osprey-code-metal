@@ -141,3 +141,49 @@ def test_real_ship_trigger_off_until_calibrated(client):
                          "cls": "person", "z_m": 1.63}]
     a = cmd(client, "set_rail", from_person=True)
     assert a["ok"] and "1.63" in a["message"] and g.trigger_enabled
+
+
+def test_deck_cam_green_ball_becomes_fix_beside_ship(client):
+    g = client.ground
+    cmd(client, "end_incident")
+    m = cmd(client, "manual_mob")
+    assert m["ok"], m
+    n = g.engine.nodes["ship"]          # ride on the ship camera's current session
+    t0 = max(time.time(), (n.last_capture_ts or 0) + 0.01)   # earlier tests feed future-dated frames
+    g.ingest_frame("ship", b"\xff\xd8\xff\xd9", n.session_id, n.last_seq + 10_000, t0, t0, "synced",
+                   [{"track_id": 7, "bbox": (0.4, 0.4, 0.5, 0.5), "confidence": 0.9,
+                     "cls": "green", "z_m": 1.6, "x_m": 0.0}], source="aurora")
+    st = client.get("/api/state").json()
+    fix = st["nodes"]["ship"]["last_accepted"]
+    assert st["nodes"]["ship"]["pill"] == "TRACKING" and st["phase"] == "TRACKING"
+    assert fix["location"]["provenance"] == "real_relative"
+    from osprey.geo import LatLon, latlon_to_enu
+    e, n = latlon_to_enu(LatLon(st["ship"]["lat"], st["ship"]["lon"]),
+                         LatLon(fix["location"]["lat"], fix["location"]["lon"]))
+    assert abs((e * e + n * n) ** 0.5 - 1.6) < 0.05      # 1.6 m from the ship, as measured
+
+
+def test_deck_cam_red_ball_is_not_a_fix(client):
+    g = client.ground
+    cmd(client, "end_incident")
+    cmd(client, "manual_mob")
+    t0 = time.time()
+    g.ingest_frame("ship", b"\xff\xd8\xff\xd9", "aur-3", 1, t0, t0, "synced",
+                   [{"track_id": 8, "bbox": (0.4, 0.4, 0.5, 0.5), "confidence": 0.9,
+                     "cls": "red", "z_m": 1.6, "x_m": 0.0}], source="aurora")
+    assert not client.get("/api/state").json()["nodes"]["ship"]["has_target"]
+
+
+def test_drawer_sim_ship_ball_rides_on_ship_frames(client):
+    cmd(client, "end_incident")
+    cmd(client, "manual_mob")
+    a = cmd(client, "demo_ship_ball", z_m=1.6, seconds=3)
+    assert a["ok"], (a, client.get("/api/state").json()["phase"])
+    g = client.ground
+    n = g.engine.nodes["ship"]           # the ship camera's next frame (no ball seen) carries it
+    t0 = max(time.time(), (n.last_capture_ts or 0) + 0.01)
+    g.ingest_frame("ship", b"\xff\xd8\xff\xd9", n.session_id, n.last_seq + 1, t0, t0, "synced", [],
+                   source="aurora")
+    st = client.get("/api/state").json()
+    assert st["nodes"]["ship"]["has_target"]
+    assert st["nodes"]["ship"]["last_accepted"]["location"]["provenance"] == "simulated"

@@ -43,7 +43,7 @@ class Settings:
     label_ship: str = "SHIP DECK CAM"
     label_A: str = "SCOUT A · FPV drone (pilot flown)"
     label_B: str = "SCOUT B · TurboPi rover (ground stand-in)"
-    target_ship: str = "person+ball"
+    target_ship: str = "ball"     # person detection off on the deck cam for now (no auto-MOB)
     target_A: str = "ball"
     target_B: str = "ball"
     target_label: str = "green ball (stand-in for the person in the water)"

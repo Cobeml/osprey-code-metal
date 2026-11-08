@@ -328,3 +328,27 @@ def test_geo_distance_sanity():
     a = loc(0)
     b = loc(50.0)
     assert horizontal_distance_m(LatLon(a.lat, a.lon), LatLon(b.lat, b.lon)) == pytest.approx(50.0, abs=0.01)
+
+
+def test_deck_camera_ball_fix_pins_position_without_confirm():
+    """A colour-classified ball with measured depth on the deck cam is a real fix beside the ship."""
+    r = Rig()
+    r.mob()
+    r.frame("ship", [det(1, location=loc(1.5))])
+    ship = r.eng.nodes["ship"]
+    assert ship.has_target and r.eng.any_contact()
+    assert r.eng.phase() == "TRACKING" and r.eng.node_pill(ship, r.clock.now()) == "TRACKING"
+    seed = r.eng.drift_seed()
+    assert seed["kind"] == "sighting" and seed["node_id"] == "ship"
+    r.frame("ship", [])                       # ball out of view
+    r.clock.advance(2)
+    r.eng.tick()
+    assert ship.lost and not r.eng.any_contact()   # area now expands from the deck-cam fix
+    assert r.eng.drift_seed()["node_id"] == "ship"
+
+
+def test_deck_camera_without_location_is_ignored():
+    r = Rig()
+    r.mob()
+    r.frame("ship", [det(1)])
+    assert not r.eng.nodes["ship"].has_target and r.eng.phase() == "OVERBOARD"

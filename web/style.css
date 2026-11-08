@@ -132,6 +132,8 @@ body.ph-STANDBY main, body.ph-CONTACT_LOST main, body.ph-ENDED main { grid-templ
 .mk-label .badge { margin-left: 4px; font-size: 9px; padding: 0 4px; }
 .mk-label.cand { border-color: var(--red); color: var(--red); }
 .mk-label.fix { border-color: var(--green); color: var(--green); }
+.mk-label.dist { padding: 0 5px; font-size: 11px; border-color: var(--green); color: var(--green); }
+.zoom-close .ship-ic svg { transform: scale(.55); }  /* the hull icon is not to scale: keep it off a 1-2 m fix */
 .mob-x { color: var(--red); font: 900 24px Inter, sans-serif; margin: -13px 0 0 -7px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 
 /* ---------------------------------------------------------------- feeds */

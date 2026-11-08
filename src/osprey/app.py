@@ -72,6 +72,7 @@ class Ground:
                            "B": SimScout("B", self.labels["B"].split("·")[-1].strip(), 2)}
         self.dispatch_state: Optional[dict] = None  # rover dispatch: {ts, status, plan}
         self.ship_ball: Optional[dict] = None       # ball fix on the deck camera (real relative)
+        self.sim_ship_ball: Optional[dict] = None   # drawer SIM stand-in, rides on the ship frames
         self.last_evidence: dict[str, float] = {}
         self.latest_jpeg: dict[str, bytes] = {}
         self.fps: dict[str, list[float]] = {}
@@ -170,15 +171,30 @@ class Ground:
         events: list[dict] = []
         image_ref = None
         # red decoys and colour-unknown balls are shown but never reach the incident engine
-        tdets = dets if node_id == "ship" else [d for d in dets if is_target(d)]
+        tdets = [d for d in dets if is_target(d)]
         if node_id == "ship":
             self.last_ship_dets = dets
             persons = [d for d in dets if d.get("cls", "person") == "person"]
             balls = [d for d in dets if d.get("cls") == "green" and d.get("z_m")]
+            sb = self.sim_ship_ball
+            if not balls and sb and now < sb["until"]:
+                balls = [{"track_id": 9001, "bbox": (0.47, 0.47, 0.53, 0.53), "confidence": 0.9,
+                          "cls": "green", "z_m": sb["z_m"], "x_m": sb["x_m"], "sim": True}]
+                dets = dets + balls
+            tdets = []
             if balls:
                 b = max(balls, key=lambda d: d["confidence"])
                 self.ship_ball = {"x_m": b.get("x_m", 0.0), "z_m": b["z_m"], "ts": capture_ts,
                                   "source": source}
+                # colour-classified green ball with measured depth -> a fix beside the ship
+                p = self.ship.camera_point(b.get("x_m", 0.0), b["z_m"])
+                prov = "real_relative" if source == "aurora" and not b.get("sim") else "simulated"
+                b["location"] = Location(lat=p.lat, lon=p.lon, provenance=prov, quality="good",
+                                         accuracy_m=0.3 if prov == "real_relative" else None).model_dump()
+                tdets = [b]
+                if self.engine.active and now - self.last_evidence.get(node_id, 0) >= EVIDENCE_MIN_PERIOD_S:
+                    image_ref = self.save_evidence(node_id, f"ship-{session_id}-{seq}.jpg", jpeg)
+                    self.last_evidence[node_id] = now
             trig = None
             if source == "sim" or self.trigger_enabled:
                 trig = self.trigger.update(capture_ts, [(d["track_id"], d.get("z_m"), d.get("x_m", 0.0))
@@ -427,6 +443,14 @@ class Ground:
         if t == "demo_speed":
             self.sclock.set_multiplier(float(a.get("multiplier", 60)))
             return {"command_id": cmd.command_id, "ok": True, "message": f"scenario x{self.sclock.multiplier:g}"}
+        if t == "demo_ship_ball":
+            # SIM stand-in for the deck camera classifying the green ball at a given range
+            z, x, secs = float(a.get("z_m", 1.6)), float(a.get("x_m", 0.0)), float(a.get("seconds", 4))
+            if not self.engine.active:
+                return {"command_id": cmd.command_id, "ok": False, "message": "no active incident"}
+            self.sim_ship_ball = {"z_m": z, "x_m": x, "until": now + secs}
+            return {"command_id": cmd.command_id, "ok": True,
+                    "message": f"sim: deck cam sees the green ball at {z:.1f} m for {secs:.0f} s"}
         if t == "demo_hide":
             self.scenario.hidden = bool(a.get("hidden", True))
             return {"command_id": cmd.command_id, "ok": True,

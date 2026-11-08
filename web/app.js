@@ -243,6 +243,10 @@ const layers = {
   setHead: L.marker([0, 0], { icon: L.divIcon({ className: "", html: '<div class="set-head">➤</div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }),
   trails: { A: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map),
             B: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map) },
+  shipFix: L.circleMarker([0, 0], { radius: 7, weight: 3, fillOpacity: 1 })
+    .bindTooltip("", { permanent: true, direction: "left", className: "mk-label fix", offset: [-10, 0] }),
+  shipLine: L.polyline([], { color: "#12b76a", weight: 2, dashArray: "4 4", interactive: false })
+    .bindTooltip("", { permanent: true, direction: "center", className: "mk-label dist" }),
   sight: {}, cand: {},
 };
 const trailPts = { A: [], B: [] };
@@ -250,20 +254,22 @@ let shipHdg = null;
 let mapCentered = false, lastIncident = null, userMovedAt = 0;
 map.on("dragstart zoomstart", (e) => { if (!autoFitting) userMovedAt = Date.now(); });
 let autoFitting = false;
+const MAX_FIT_ZOOM = 20;   // close enough that a deck-cam fix 1-2 m off the hull is visibly apart
+map.on("zoomend", () => $("#chart").classList.toggle("zoom-close", map.getZoom() >= 19));
 function autoFit() {
   if (!snap || Date.now() - userMovedAt < 15000) return;
   const pts = [[snap.ship.lat, snap.ship.lon]];
   const inc = snap.incident;
   if (inc && inc.mob_location) pts.push([inc.mob_location.lat, inc.mob_location.lon]);
-  for (const n of ["A", "B"]) { const la = snap.nodes[n] && snap.nodes[n].last_accepted; if (la && la.location) pts.push([la.location.lat, la.location.lon]); }
+  for (const n of ["ship", "A", "B"]) { const la = snap.nodes[n] && snap.nodes[n].last_accepted; if (la && la.location) pts.push([la.location.lat, la.location.lon]); }
   for (const c of allCandidates()) if (c.location) pts.push([c.location.lat, c.location.lon]);
   if (snap.drift) pts.push(...snap.drift.hull90);
   const b = L.latLngBounds(pts);
   const view = map.getBounds().pad(-0.1);
-  const want = Math.min(18, map.getBoundsZoom(b.pad(0.3)));
+  const want = Math.min(MAX_FIT_ZOOM, map.getBoundsZoom(b.pad(0.3)));
   if (!view.contains(b) || want - map.getZoom() >= 1) {
     autoFitting = true;
-    map.fitBounds(b.pad(0.25), { maxZoom: 18, animate: true });
+    map.fitBounds(b.pad(0.25), { maxZoom: MAX_FIT_ZOOM, animate: true });
     setTimeout(() => (autoFitting = false), 600);
   }
 }
@@ -327,7 +333,7 @@ function renderChart() {
     drawSet(d.seed, d.centroid);
     lab.classList.remove("hidden");
     const lostHdr = d.seed_kind === "sighting"
-      ? `<div class="lost-note">Contact lost ${fmtAge(t - d.seed_ts)} ago · area expanding from Scout ${d.seed_node}'s last sighting</div>` : "";
+      ? `<div class="lost-note">Contact lost ${fmtAge(t - d.seed_ts)} ago · area expanding from ${d.seed_node === "ship" ? "the deck camera's fix" : "Scout " + d.seed_node + "'s last sighting"}</div>` : "";
     lab.innerHTML = `<h4>Drift search area <span class="badge">ESTIMATE</span></h4>${lostHdr}<dl>` +
       `<dt>Model</dt><dd>${d.model}</dd><dt>Forcing</dt><dd>${d.forcing}</dd>` +
       `<dt>Seeded from</dt><dd>${d.seed_kind === "overboard" ? "Overboard point" : "Last sighting (" + d.seed_node + ")"}</dd>` +
@@ -342,14 +348,26 @@ function renderChart() {
     requestAnimationFrame(animateCollapse);
     lab.classList.remove("hidden");
     lab.innerHTML = `<h4>Position fixed <span class="badge real">SIGHTING</span></h4>` +
-      `<div class="fine"><span class="fix">Drift area collapsed to Scout ${la.node_id}'s sighting.</span> ` +
-      `${snap.dispatch && snap.dispatch.handoff ? "Fix sent to the rover. " : ""}Coordinates simulated (no GPS).</div>`;
+      `<div class="fine"><span class="fix">Drift area collapsed to ${la.node_id === "ship" ? "the deck camera's fix" : "Scout " + la.node_id + "'s sighting"}.</span> ` +
+      `${snap.dispatch && snap.dispatch.handoff ? "Fix sent to the rover. " : ""}` +
+      `${la.node_id === "ship" ? "Green ball classified by colour; range from stereo depth, relative to the ship." : "Coordinates simulated (no GPS)."}</div>`;
     clearTimeout(fixLabelTimer);
     fixLabelTimer = setTimeout(() => { fixLabelTimer = null; if (!snap.drift) lab.classList.add("hidden"); }, 6000);
   } else if (!collapse) {
     setLatLngs(layers.hull90, null); setLatLngs(layers.hull50, null);
     if (!fixLabelTimer) lab.classList.add("hidden");
   }
+
+  const sf = snap.nodes.ship && snap.nodes.ship.last_accepted;
+  if (sf && sf.location && inc && !inc.ended) {
+    const p = [sf.location.lat, sf.location.lon], age = t - sf.capture_ts, fresh = age <= 6.0;
+    const dist = L.latLng(ship).distanceTo(p);
+    layers.shipFix.setLatLng(p).addTo(map).setStyle({ fillColor: fresh ? "#12b76a" : "#fff", color: fresh ? "#fff" : "#12b76a",
+      dashArray: fresh ? null : "3 3" });
+    layers.shipFix.setTooltipContent(`Deck cam fix · ${fresh ? "now" : fmtAge(age) + " ago"} <span class="badge real">MEASURED</span>`);
+    layers.shipLine.setLatLngs([ship, p]).addTo(map);
+    layers.shipLine.setTooltipContent(`${dist.toFixed(1)} m`);
+  } else { layers.shipFix.remove(); layers.shipLine.remove(); }
 
   for (const n of ["A", "B"]) {
     const ns = snap.nodes[n];
