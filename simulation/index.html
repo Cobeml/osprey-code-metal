@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Osprey · Mission Theatre</title>
+  <link rel="stylesheet" href="./mission-3d.css">
+</head>
+<body>
+  <header><a class="brand" href="./">◈ <span>OSPREY<small>MISSION THEATRE</small></span></a><div class="mode-tag" id="provenance">CONCEPT SIMULATION</div><div class="header-right"><span class="live-dot"></span><span id="connection">STANDALONE STORY</span></div></header>
+  <div class="workspace">
+    <section class="theatre" aria-label="Interactive 3D maritime rescue scene">
+      <div id="viewport"></div>
+      <div class="scene-title"><div class="eyebrow">OPEN OCEAN / MAN OVERBOARD</div><h1>Find. Follow.<br><span>Bring them home.</span></h1><p>A coordinated aerial search and surface response.</p></div>
+      <div class="scene-notes"><span>ILLUSTRATIVE VEHICLES · COMPRESSED SCENARIO TIME</span><span>Swarm + USV = product vision<br>Live demo = piloted Aquila16 + TurboPi</span></div>
+      <div class="camera-controls" aria-label="Camera presets"><button data-camera="overview" class="selected">Overview</button><button data-camera="deck">Ship</button><button data-camera="rescue">Rescue</button><span>Drag to orbit · Scroll to zoom</span></div>
+      <div class="object-label" id="person-label">PERSON OVERBOARD</div><div class="model-legend"><span class="particle-dot"></span> Drift particles <span class="legend-line"></span> UAV sweep <span class="legend-line usv"></span> USV route<br><span id="model-status">Wind + current + leeway → probability → search</span></div><div class="object-label" id="boat-label">RESCUE USV</div>
+      <div class="model-hud"><span>PREDICTED SEARCH AREA</span><strong id="area-hud">STANDBY</strong><small id="clock-hud">Drift clock · 6×</small><small>Gold: 90% region · bright core: 50%</small></div><div class="scene-error" id="scene-error" hidden></div>
+      <section id="guide" class="guide" hidden aria-label="Mission explanation" aria-live="polite"><span class="eyebrow" id="guide-label"></span><h2 id="guide-title"></h2><p id="guide-copy"></p><button id="guide-next" class="primary">Continue now →</button></section>
+      <div id="rescue-gap" class="rescue-gap">USV · SLOW SEARCH NEAR LAUNCH</div><div class="guide-toggle"><label><input id="guided" type="checkbox" checked> Auto phase explainers</label></div>
+      <div class="transport"><button id="play" class="primary">▶ Play mission</button><button id="reset" aria-label="Reset mission">↺ Reset</button><label class="scrubber-label">Mission time<input id="scrubber" type="range" min="0" max="49" value="0" step="0.1" aria-label="Mission time"></label><output id="time">00:00</output><select id="speed" aria-label="Playback speed"><option value="1">1×</option><option value="2">2×</option><option value="0.5">0.5×</option></select></div>
+    </section>
+    <aside class="mission-panel">
+      <div class="panel-heading"><span class="eyebrow">RESPONSE SEQUENCE</span><span id="step-number">01 / 06</span></div>
+      <div id="steps"></div>
+      <div class="brief"><span class="eyebrow" id="brief-label">01 / UNDERWAY</span><h2 id="brief-title">A watch that never ends.</h2><p id="brief-copy"></p></div>
+      <div class="telemetry"><div><span>MISSION STATE</span><strong id="mission-state">UNDERWAY</strong></div><div><span>VISUAL CONTACT</span><strong id="contact-state">NOT ACQUIRED</strong></div><div><span>SURFACE RESPONSE</span><strong id="surface-state">ON STANDBY</strong></div></div>
+      <div class="model-readout"><div class="eyebrow">DRIFT → SEARCH GUIDANCE</div><dl><div><dt>Model elapsed</dt><dd id="model-time">00:00</dd></div><div><dt>Time since fix</dt><dd id="fix-age">—</dd></div><div><dt>90% ensemble area</dt><dd id="model-area">—</dd></div><div><dt>Environment</dt><dd id="environment">Loading…</dd></div></dl><div class="overlay-toggles"><label><input type="checkbox" id="probability" checked> Probability overlay</label><label><input type="checkbox" id="truth" checked> Show hidden scenario truth</label></div><p id="model-source">800 particles · 50% / 90% ensemble regions. Model probabilities are not validated real-world confidence.</p></div><div class="source-controls"><p>Standalone concept simulation. Scripted sightings and illustrative vehicle motion; no live hardware connection.</p></div>
+    </aside>
+  </div>
+  <footer><span>ONE INCIDENT. A SHARED PICTURE.</span><span id="footer-note">Concept mission · illustrative trajectories · no physical commands</span></footer>
+  <script type="module" src="./mission-3d.js"></script>
+</body>
+</html>

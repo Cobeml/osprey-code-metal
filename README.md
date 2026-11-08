@@ -12,6 +12,15 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 | Scout B | Phone camera through an HTTPS tunnel (proxy for a second drone) |
 | Coordinator | Browser display on a laptop, wired to the ground processor |
 
+## Two independent features
+
+| Feature | Location | Purpose | Run |
+|---|---|---|---|
+| Operational coordinator UI | `web/` + `src/osprey/` | Camera feeds, incidents, drift estimates and hardware coordination | Existing Pi/server workflow below |
+| 3D mission simulation | [`simulation/`](simulation/README.md) | Standalone narrated product-vision demonstration with scripted sightings | `python3 -m http.server 8087 --bind 127.0.0.1 --directory simulation`, then open `http://127.0.0.1:8087/` |
+
+The simulation has no live coordinator or hardware connection. Its bundled data and graphics run independently; its optional fixture generator reuses the repository's drift model. See [simulation research and assumptions](simulation/RESEARCH.md).
+
 ## Docs
 
 - [PRD](docs/prd.md): story, requirements, targets, honesty labels
@@ -20,9 +29,9 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 - [Hardware setup](docs/hardware-setup.md): bring-up steps for the team
 - [Research](docs/research.md) · [Event constraints](docs/event-constraints.md)
 
-## Run it
+## Run the operational coordinator
 
-Everything runs on the Pi; the Mac only edits, deploys and displays. From the Mac, in this repo:
+For the operational coordinator, everything runs on the Pi; the Mac only edits, deploys and displays. From the Mac, in this repo:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
