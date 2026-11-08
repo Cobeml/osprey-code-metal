@@ -138,9 +138,64 @@ document.querySelectorAll(".tile canvas").forEach((cv) => {
     const x = ((e.clientX - r.left) * (cv.width / r.width) - fit.x) / fit.w;
     const y = ((e.clientY - r.top) * (cv.height / r.height) - fit.y) / fit.h;
     const hit = f.liveHeader.boxes.find((b) => b.candidate_id && x >= b.bbox[0] && x <= b.bbox[2] && y >= b.bbox[1] && y <= b.bbox[3]);
-    if (hit) { selectedCandidate = hit.candidate_id; toast("Selected candidate on " + node); }
+    if (hit) { selectedCandidate = hit.candidate_id; toast("Selected candidate on " + node); return; }
+    if (expandedNode === node) collapseTile(); else expandTile(node);
   };
 });
+
+// ------------------------------------------------------------------ expandable camera views
+// click a video to enlarge it over the page; click it again (or the backdrop, or Esc) to restore
+// [share of window width, share of window height] each size may use
+const TILE_SIZES = { S: [0.5, 0.6], M: [0.68, 0.75], L: [0.85, 0.88], Full: [0.99, 0.99] };
+let expandedNode = null, expandedSize = "M";
+try { expandedSize = localStorage.getItem("osprey.tileSize") || "M"; } catch (_) { /* storage blocked */ }
+if (!TILE_SIZES[expandedSize]) expandedSize = "M";
+const backdrop = document.createElement("div");
+backdrop.id = "tile-backdrop";
+backdrop.onclick = () => collapseTile();
+document.body.appendChild(backdrop);
+document.querySelectorAll(".tile").forEach((tile) => {
+  const bar = document.createElement("div");
+  bar.className = "size-bar";
+  bar.innerHTML = `<span class="lbl">Size</span><div class="sizes">` +
+    Object.keys(TILE_SIZES).map((k) => `<button data-size="${k}">${k}</button>`).join("") +
+    `</div><button class="restore">Back to normal ✕</button>`;
+  bar.querySelectorAll("[data-size]").forEach((b) => (b.onclick = () => setTileSize(b.dataset.size)));
+  bar.querySelector(".restore").onclick = () => collapseTile();
+  tile.appendChild(bar);
+});
+function layoutExpanded() {
+  if (!expandedNode) return;
+  const tile = document.querySelector(`.tile[data-node="${expandedNode}"]`);
+  const [fw, fh] = TILE_SIZES[expandedSize], chrome = tile.offsetHeight - tile.querySelector(".video").offsetHeight + 16;
+  // video keeps the canvas's 16:10 so boxes and clicks line up; fit inside the window either way
+  const w = Math.min(fw * innerWidth, (fh * innerHeight - chrome) * 1.6);
+  tile.style.width = Math.max(320, Math.round(w)) + "px";
+  tile.querySelectorAll("[data-size]").forEach((b) => b.classList.toggle("on", b.dataset.size === expandedSize));
+}
+function expandTile(node) {
+  if (expandedNode) collapseTile();
+  expandedNode = node;
+  document.querySelector(`.tile[data-node="${node}"]`).classList.add("expanded");
+  document.body.classList.add("has-expanded");
+  layoutExpanded();
+  requestAnimationFrame(layoutExpanded);   // second pass once the size bar has its height
+}
+function collapseTile() {
+  if (!expandedNode) return;
+  const tile = document.querySelector(`.tile[data-node="${expandedNode}"]`);
+  tile.classList.remove("expanded");
+  tile.style.width = "";
+  document.body.classList.remove("has-expanded");
+  expandedNode = null;
+}
+function setTileSize(k) {
+  expandedSize = k;
+  try { localStorage.setItem("osprey.tileSize", k); } catch (_) { /* storage blocked */ }
+  layoutExpanded();
+}
+addEventListener("resize", layoutExpanded);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") collapseTile(); });
 
 // ------------------------------------------------------------------ timeline
 const TL_TYPES = { dispatch: "rover launched", handoff: "fix → rover", mob: "MOB", confirm: "confirmed", associated: "associated",
@@ -562,7 +617,7 @@ function subtitle() {
   const tracking = ["A", "B"].filter((n) => snap.nodes[n] && snap.nodes[n].has_target && !snap.nodes[n].lost);
   switch (p) {
     case "STANDBY":
-      if (!snap.rail.trigger_enabled) return "Deck camera live with person detection. Rail not calibrated — auto-MOB off (manual MOB in the demo drawer).";
+      if (!snap.rail.trigger_enabled) return "Deck camera live, looking for the green ball. Auto-MOB off — start with Manual MOB (key D).";
       return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
     case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + " Drone and rover launched — drone searching the drift area.";
     case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` : "Candidate needs a decision."; }

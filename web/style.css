@@ -150,6 +150,26 @@ body.ph-CANDIDATE #feeds { grid-template-rows: 2.4fr 1fr 1fr; }
 .tile-head .src:empty { display: none; }
 .video { position: relative; flex: 1; min-height: 0; margin: 8px; border-radius: 8px; overflow: hidden; background: #0b1520; }
 .video canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; cursor: pointer; display: block; }
+/* expandable camera views */
+.video canvas { cursor: zoom-in; }
+.tile.expanded .video canvas { cursor: zoom-out; }
+.video::after { content: "⤢ click to enlarge"; position: absolute; top: 8px; right: 8px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(0,0,0,.55); color: #fff; font: 600 11px Inter, sans-serif; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.video:hover::after { opacity: 1; }
+.tile.expanded .video::after { content: "click to restore"; }
+#tile-backdrop { position: fixed; inset: 0; z-index: 1500; background: rgba(11,21,32,.55); display: none; }
+body.has-expanded #tile-backdrop { display: block; }
+.tile.expanded { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1600; max-width: 98vw;
+  max-height: 98vh; box-shadow: 0 24px 64px rgba(11,21,32,.4); order: 0; }
+.tile.expanded .video { flex: none; aspect-ratio: 16 / 10; }
+.size-bar { display: none; align-items: center; gap: 10px; padding: 0 12px 10px; font-size: 12px; }
+.tile.expanded .size-bar { display: flex; }
+.size-bar .lbl { color: var(--muted); font-weight: 600; }
+.size-bar .sizes { display: flex; gap: 4px; }
+.size-bar button { padding: 5px 12px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface);
+  font: 600 12px Inter, sans-serif; color: var(--text); cursor: pointer; }
+.size-bar button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.size-bar .restore { margin-left: auto; }
 .tile .age { position: absolute; left: 8px; bottom: 8px; font: 600 11px var(--mono); color: #fff;
   background: rgba(15,29,46,.75); padding: 2px 7px; border-radius: 4px; }
 .tile .age:empty { display: none; }
