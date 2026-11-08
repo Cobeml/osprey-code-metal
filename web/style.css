@@ -278,3 +278,7 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
   #hint { display: none; }
 }
 .tile .age:not(:empty) ~ .target { display: none; }
+
+/* remote view-only screen (through the tunnel with the view key) */
+.view-only .decide button, .view-only #controls button, .view-only #drawer, .view-only #hint { display: none !important; }
+.view-pill { background: var(--amber-bg); color: var(--amber); }

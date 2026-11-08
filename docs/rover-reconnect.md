@@ -25,6 +25,12 @@ Check it from the Mac (should print `{"ok":true,...} 200`):
 curl -s -w ' %{http_code}\n' "$(ssh mob-pi '~/osprey/scripts/tunnel.sh url' | sed 's#/scout$##')/health"
 ```
 
+View-only dashboard for a computer or phone that isn't on the Ethernet (new link each new tunnel;
+the key itself stays the same):
+```bash
+ssh mob-pi '~/osprey/scripts/tunnel.sh view'       # https://<new>.trycloudflare.com/?k=<key>
+```
+
 ## 2. Rover: rejoin the venue Wi-Fi (the human types the password)
 Hiwonder's `wifi.service` brings its own hotspot back at every boot, so this is needed after each rover
 reboot. The name must be exactly `BASE-X Guest`, case included. Right after boot the rover (running its

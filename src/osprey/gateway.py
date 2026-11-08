@@ -47,8 +47,9 @@ class Thinner:
 
 
 class _Client:
-    def __init__(self, ws: WebSocket):
+    def __init__(self, ws: WebSocket, read_only: bool = False):
         self.ws = ws
+        self.read_only = read_only
         self.frames: dict[str, bytes] = {}
         self.events: list[dict] = []
         self.state: Optional[dict] = None
@@ -96,9 +97,9 @@ class Gateway:
             c.wake.set()
 
     # -------------------------------------------------------------- per-display connection
-    async def serve(self, ws: WebSocket) -> None:
+    async def serve(self, ws: WebSocket, read_only: bool = False) -> None:
         await ws.accept()
-        c = _Client(ws)
+        c = _Client(ws, read_only)
         while self.in_outage:  # injected outage: a new connection gets nothing either
             await asyncio.sleep(0.1)
         self.clients.add(c)
@@ -158,7 +159,11 @@ class Gateway:
                 msg = json.loads(await c.ws.receive_text())
                 if self.in_outage:
                     continue  # link is down both ways
-                if msg.get("type") == "command" and self.command_fn:
+                if msg.get("type") == "command" and c.read_only:
+                    c.acks.append({"command_id": msg.get("command_id"), "ok": False,
+                                   "message": "view-only screen: commands are refused"})
+                    c.wake.set()
+                elif msg.get("type") == "command" and self.command_fn:
                     c.acks.append(await self.command_fn(msg))
                     c.wake.set()
         except Exception:  # noqa: BLE001 - disconnect ends the receiver

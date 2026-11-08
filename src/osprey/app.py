@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -588,6 +588,27 @@ app = FastAPI(title="Osprey", lifespan=lifespan)
 
 
 TUNNEL_ALLOWED = ("/scout", "/health")
+# View-only dashboard through the tunnel: open https://<tunnel>/?k=<key> once; that sets a cookie
+# for the page's assets and live socket. Commands are never accepted through the tunnel.
+VIEW_COOKIE = "osprey_view"
+VIEW_PATHS = ("/", "/static/", "/api/state", "/api/history", "/api/frame/", "/ws")
+
+
+def view_key() -> str:
+    """Random key kept in the runtime dir, so the link survives ground restarts."""
+    p = Path(ground.s.runtime_dir) / "view_key"
+    try:
+        k = p.read_text().strip()
+        if len(k) >= 16:
+            return k
+    except OSError:
+        pass
+    import secrets
+
+    k = secrets.token_urlsafe(18)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(k + "\n")
+    return k
 
 
 def via_tunnel(headers) -> bool:
@@ -596,13 +617,29 @@ def via_tunnel(headers) -> bool:
     return host.endswith(".trycloudflare.com") or "cf-connecting-ip" in headers
 
 
+def viewer(conn) -> bool:
+    """A tunnel request carrying the view key (query ?k= or the cookie it set)."""
+    import hmac
+
+    k = conn.query_params.get("k") or conn.cookies.get(VIEW_COOKIE) or ""
+    return hmac.compare_digest(k.encode(), view_key().encode())
+
+
+def view_path(path: str) -> bool:
+    return any(path == v or (v.endswith("/") and path.startswith(v)) for v in VIEW_PATHS)
+
+
 @app.middleware("http")
 async def no_cache_static(request, call_next):
     if via_tunnel(request.headers) and request.url.path not in TUNNEL_ALLOWED:
-        return JSONResponse({"error": "not available through the tunnel"}, status_code=403)
+        if not (request.method == "GET" and view_path(request.url.path) and viewer(request)):
+            return JSONResponse({"error": "not available through the tunnel"}, status_code=403)
     resp = await call_next(request)
     if request.url.path.startswith("/static"):
         resp.headers["Cache-Control"] = "no-store"
+    if via_tunnel(request.headers) and request.query_params.get("k"):
+        resp.set_cookie(VIEW_COOKIE, request.query_params["k"], max_age=7 * 86400,
+                        httponly=True, secure=True, samesite="lax")
     return resp
 WEB = ROOT / "web"
 
@@ -617,10 +654,12 @@ BOOT = str(int(time.time()))
 
 
 @app.get("/")
-def index():
+def index(request: Request):
     from fastapi.responses import HTMLResponse
 
     html = (WEB / "index.html").read_text().replace("{{v}}", BOOT)
+    if via_tunnel(request.headers):
+        html = html.replace("<body>", '<body class="view-only">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
@@ -671,6 +710,12 @@ def api_video_devices():
     return {"devices": list_uvc(), "capture": ground.capture.status}
 
 
+@app.get("/api/view_link")
+def api_view_link():
+    """Wired only (the tunnel guard blocks it): the key for the view-only link."""
+    return {"key": view_key(), "path": "/?k=" + view_key()}
+
+
 @app.get("/api/history")
 def api_history():
     return ground._history()
@@ -678,10 +723,11 @@ def api_history():
 
 @app.websocket("/ws")
 async def ws_display(ws: WebSocket):
-    if via_tunnel(ws.headers):  # the coordinator display is wired-only
+    read_only = via_tunnel(ws.headers)  # through the tunnel: view key only, never commands
+    if read_only and not viewer(ws):
         await ws.close(code=1008)
         return
-    await ground.gateway.serve(ws)
+    await ground.gateway.serve(ws, read_only=read_only)
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")

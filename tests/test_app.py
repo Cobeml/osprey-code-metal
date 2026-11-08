@@ -97,6 +97,35 @@ def test_tunnel_only_exposes_scout(client):
     assert client.get("/", headers={"host": "169.254.50.2:8000"}).status_code == 200
 
 
+def test_tunnel_view_key_gives_read_only_dashboard(client):
+    h = {"host": "abc-def.trycloudflare.com"}
+    key = client.get("/api/view_link").json()["key"]
+    assert client.get("/api/view_link", headers=h).status_code == 403
+    assert client.get("/?k=wrong", headers=h).status_code == 403
+    r = client.get(f"/?k={key}", headers=h)
+    assert r.status_code == 200 and 'class="view-only"' in r.text
+    assert "osprey_view" in r.headers.get("set-cookie", "")
+    ck = {"osprey_view": key}
+    assert client.get("/static/app.js", headers=h, cookies=ck).status_code == 200
+    assert client.get("/api/state", headers=h, cookies=ck).status_code == 200
+    assert client.post("/api/commands", json={"cmd": "manual_mob"}, headers=h, cookies=ck).status_code == 403
+    assert 'class="view-only"' not in client.get("/").text
+    client.cookies.clear()
+    phase = client.ground.engine.phase()
+    with client.websocket_connect(f"/ws?k={key}", headers=h) as ws:
+        ws.send_text(json.dumps({"type": "command", "command_id": "x1", "cmd": "manual_mob", "args": {}}))
+        for _ in range(50):
+            m = ws.receive()
+            if m.get("text") and json.loads(m["text"]).get("type") == "ack":
+                ack = json.loads(m["text"])
+                break
+    assert ack["ok"] is False and "view-only" in ack["message"]
+    assert client.ground.engine.phase() == phase
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws", headers=h) as ws:
+            ws.receive_text()
+
+
 def test_rover_launches_on_mob_and_gets_fix_on_confirm(client):
     cmd(client, "end_incident")
     g = client.ground

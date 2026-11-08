@@ -88,7 +88,15 @@ async function onFrame(buf) {
 }
 
 // ------------------------------------------------------------------ commands
+const VIEW_ONLY = document.body.classList.contains("view-only");
+if (VIEW_ONLY) {
+  const pill = document.createElement("span");
+  pill.className = "pill view-pill"; pill.textContent = "VIEW ONLY";
+  pill.title = "Remote view through the tunnel: commands are only accepted on the wired coordinator screen";
+  $("#link").before(pill);
+}
 function send(cmd, args, el) {
+  if (VIEW_ONLY) { toast("✗ view-only screen: use the coordinator screen"); return; }
   const command_id = cmd + "-" + Math.random().toString(36).slice(2, 10);
   if (!ws || ws.readyState !== WebSocket.OPEN || !linkUp) { toast("✗ link down — command not sent"); return; }
   pending.set(command_id, { cmd, el });
