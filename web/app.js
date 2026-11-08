@@ -628,14 +628,15 @@ function subtitle() {
     case "STANDBY":
       if (!snap.rail.trigger_enabled) return "Deck camera live, looking for the green ball. Auto-MOB off — start with Manual MOB (key D).";
       return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
-    case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + " Drone and rover launched — drone searching the drift area.";
-    case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` : "Candidate needs a decision."; }
+    case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + (snap.dispatch_on === "confirm" ? " Drone launched, searching the drift area. Rover waits for the drone's sighting to be confirmed." : " Drone and rover launched — drone searching the drift area.");
+    case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` + (snap.dispatch_on === "confirm" && snap.roles && c.node_id === snap.roles.drone && !snap.dispatch ? " Confirming sends the rover." : "") : "Candidate needs a decision."; }
     case "TRACKING": {
       if (!tracking.length) { const la = snap.last_accepted; return `All scouts lost visual — last fix ${fmtAge(t - la.capture_ts)} old, still fresh.`; }
       const names = tracking.map((n) => (snap.roles && n === snap.roles.rover ? "rover" : snap.roles && n === snap.roles.drone ? "drone" : "Scout " + n));
       const d = snap.dispatch;
       let extra = "";
       if (d && d.status === "arrived") extra = " Rover on scene.";
+      else if (d && !tracking.includes(snap.roles.rover) && snap.dispatch_on === "confirm") extra = ` Rover ${({ dispatched: "driving ahead", turning: "driving ahead", driving: "driving ahead, looking for the ball", searching: "searching for the ball", approaching: "closing in on the ball" })[d.status] || d.status}.`;
       else if (d && !tracking.includes(snap.roles.rover)) extra = d.handoff ? ` Fix sent to rover — ${d.handoff.range_m} m at ${d.handoff.bearing_deg}°.` : ` Rover ${({ dispatched: "en route", driving: "en route" })[d.status] || d.status}.`;
       if (!snap.follow_enabled) extra += " Following stopped by coordinator.";
       const who = names.join(" + ");

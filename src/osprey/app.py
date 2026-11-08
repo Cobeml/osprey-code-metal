@@ -114,7 +114,7 @@ class Ground:
 
     # -------------------------------------------------------------- events
     def record(self, events: list[dict]) -> None:
-        launch = handoff = False
+        launch = launch_straight = handoff = False
         for e in events:
             if not self.store.append(e):
                 continue
@@ -123,9 +123,11 @@ class Ground:
                 loc = e.get("location")
                 self.scenario.on_mob(Location(**loc) if loc else None, e["capture_ts"])
                 self.drift.clear()
-                launch = True
+                launch = self.s.dispatch_on == "mob"
             elif t == "confirm":
                 handoff = True
+                if self.s.dispatch_on == "confirm" and e.get("node_id") == self.drone:
+                    launch_straight = True
             elif t == "end":
                 self.dispatch_state = None
                 self.scenario.end()
@@ -136,6 +138,8 @@ class Ground:
         # follow-ups go out after the events that caused them
         if launch:
             self.launch_rover()
+        if launch_straight:
+            self.launch_rover(self.straight_plan())
         if handoff:
             self.handoff_to_rover()
 
@@ -345,6 +349,7 @@ class Ground:
         snap["scenario"] = {"multiplier": self.sclock.multiplier, "hidden": self.scenario.hidden}
         snap["outage"] = max(0.0, self.gateway.outage_until - now)
         snap["roles"] = {"drone": self.drone, "rover": self.rover}
+        snap["dispatch_on"] = self.s.dispatch_on
         snap["target_label"] = self.s.target_label
         snap["dispatch"] = self.dispatch_state
         snap["rover_onboard"] = self.rover_onboard
@@ -371,12 +376,19 @@ class Ground:
         return {"heading_deg": self.s.dispatch_heading_deg, "distance_m": self.s.dispatch_distance_m,
                 "basis": "default run-out, then camera search"}
 
-    def launch_rover(self) -> None:
-        """On man overboard the rover launches with the drone, toward the overboard direction."""
+    def straight_plan(self) -> dict:
+        """After the drone's sighting is confirmed: the ball is placed ahead of the rover, so it
+        drives straight until its own camera sees it, then approaches."""
+        return {"heading_deg": 0.0, "distance_m": self.s.dispatch_straight_m,
+                "basis": "drone sighting confirmed: straight ahead until the rover sees the ball"}
+
+    def launch_rover(self, plan: Optional[dict] = None) -> None:
+        """Send the rover out: on man overboard (dispatch_on=mob, toward the overboard direction)
+        or once the drone's sighting is confirmed (dispatch_on=confirm, straight ahead)."""
         if not self.engine.active or self.dispatch_state is not None:
             return
         now = self.clock.now()
-        plan = self.dispatch_plan()
+        plan = plan or self.dispatch_plan()
         self.dispatch_state = {"ts": now, "status": "dispatched", "plan": plan,
                                "node": self.rover, "handoff": None}
         self.scouts.send(self.rover, {"type": "dispatch", **plan})

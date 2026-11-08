@@ -100,6 +100,7 @@ def test_tunnel_only_exposes_scout(client):
 def test_rover_launches_on_mob_and_gets_fix_on_confirm(client):
     cmd(client, "end_incident")
     g = client.ground
+    g.s.dispatch_on = "mob"
     plan = g.dispatch_plan()
     assert plan["basis"].startswith("default")
     g.ship_ball = {"x_m": 1.0, "z_m": 2.0, "ts": time.time(), "source": "aurora"}
@@ -122,6 +123,31 @@ def test_rover_launches_on_mob_and_gets_fix_on_confirm(client):
     g.handoff_to_rover()
     h = g.dispatch_state["handoff"]
     assert h["from_node"] == "A" and h["range_m"] == pytest.approx(30.0, abs=0.5)
+    cmd(client, "end_incident")
+    assert g.dispatch_state is None
+    g.s.dispatch_on = "confirm"
+
+
+def test_rover_waits_for_drone_confirm_then_drives_straight(client):
+    cmd(client, "end_incident")
+    g = client.ground
+    g.s.dispatch_on = "confirm"
+    sent = []
+    g.scouts.send = lambda node, m: sent.append((node, m))
+    assert cmd(client, "manual_mob")["ok"]
+    assert g.dispatch_state is None and not sent          # MOB alone: rover stays put
+    assert client.get("/api/state").json()["dispatch_on"] == "confirm"
+    now = time.time()
+    # the rover's own confirmed sighting does not launch it
+    g.record([g.engine._ev("confirm", now, "B", candidate_id="c0")])
+    assert g.dispatch_state is None
+    g.record([g.engine._ev("confirm", now, "A", candidate_id="c1")])
+    ds = g.dispatch_state
+    assert ds and ds["status"] == "dispatched"
+    assert ds["plan"]["heading_deg"] == 0.0 and ds["plan"]["distance_m"] == g.s.dispatch_straight_m
+    assert ("B", {"type": "dispatch", **ds["plan"]}) in sent
+    g.record([g.engine._ev("confirm", now, "A", candidate_id="c2")])   # a second confirm: no relaunch
+    assert sum(1 for _, m in sent if m["type"] == "dispatch") == 1
     cmd(client, "end_incident")
     assert g.dispatch_state is None
 

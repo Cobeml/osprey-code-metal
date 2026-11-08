@@ -58,6 +58,11 @@ class Settings:
     dispatch_heading_deg: float = 0.0
     dispatch_distance_m: float = 1.5
     dispatch_stop_short_m: float = 0.4
+    # when the rover launches: "confirm" = once the coordinator confirms the drone's sighting
+    # (then a straight run-out: the rover drives ahead until its camera sees the ball);
+    # "mob" = with the drone, the moment man overboard is raised
+    dispatch_on: str = "confirm"
+    dispatch_straight_m: float = 4.0   # straight run-out after a confirm (+1 m, then camera search)
     sim_fps: float = 10.0
     detector: str = "hailo"  # hailo|none
     hef_path: str = "/usr/share/hailo-models/yolov8s_h8.hef"
