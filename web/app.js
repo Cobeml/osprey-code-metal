@@ -683,5 +683,6 @@ function frame() {
   requestAnimationFrame(frame);
 }
 setInterval(() => { if (snap) renderChart(); }, 250);
+for (const sel of ["#estimate-label", "#legend"]) $(sel).addEventListener("click", (e) => e.currentTarget.classList.toggle("collapsed"));
 connect();
 requestAnimationFrame(frame);

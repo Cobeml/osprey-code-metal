@@ -118,6 +118,17 @@ body.ph-CANDIDATE main { grid-template-columns: minmax(300px, .5fr) 1fr; }
 .lg-dot { background: var(--c); }
 .lg-cand { border: 2.5px solid var(--red); }
 .lg-hull { border-radius: 3px !important; background: rgba(247,144,9,.25); border: 1.5px solid #f79009; }
+/* drift card + legend: small chips on the chart, click to expand / collapse */
+.collapsible { cursor: pointer; user-select: none; }
+#estimate-label h4::after, .legend-head::after { content: "▾"; margin-left: auto; color: var(--muted); font-size: 11px; }
+#estimate-label.collapsed h4::after, #legend.collapsed .legend-head::after { content: "▸"; }
+#estimate-label.collapsed { width: auto; padding: 6px 10px; }
+#estimate-label.collapsed h4 { margin: 0; font-size: 12px; }
+#estimate-label.collapsed > :not(h4) { display: none; }
+.legend-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
+#legend:not(.collapsed) .legend-head { margin-bottom: 8px; }
+#legend.collapsed { padding: 6px 10px; }
+#legend.collapsed .legend-items, #legend.collapsed #chart-note { display: none; }
 #chart-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted);
   display: flex; gap: 6px; align-items: baseline; }
 
@@ -137,7 +148,7 @@ body.ph-CANDIDATE main { grid-template-columns: minmax(300px, .5fr) 1fr; }
 .mob-x { color: var(--red); font: 900 24px Inter, sans-serif; margin: -13px 0 0 -7px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 
 /* ---------------------------------------------------------------- feeds */
-#feeds { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0;
+#feeds { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 2.2fr 1fr; gap: 12px; min-height: 0;
   transition: grid-template-rows .45s; }
 #feeds .tile[data-node="A"] { order: 1; }
 #feeds .tile[data-node="B"] { order: 2; }
