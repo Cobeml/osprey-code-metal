@@ -24,6 +24,12 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 | Scout B | Hiwonder TurboPi rover on Wi-Fi: locks on, drives to and follows the person (ground stand-in for a drone) |
 | Coordinator | Browser display on a laptop, wired to the ground processor |
 
+## Operational Concept and Hackathon Hardware
+
+![Osprey proposed maritime response: an MOB trigger alerts the mission controller, UAVs keep the person in sight, and a USV brings support under crew supervision. Hackathon hardware stand-ins include a Grove water sensor, BetaFPV micro quadcopter, TurboPi rover and a visible ball representing the person.](docs/media/osprey-operational-concept.png)
+
+Proposed maritime concept and hackathon hardware stand-ins. The implementation architecture below shows the system's data connections.
+
 ## Architecture
 
 ![Osprey data flow: the water sensor and deck camera reach the ground Pi over USB; the TurboPi rover over Wi-Fi through a Cloudflare tunnel (Ethernet when docked); the phone (UAV proxy) through the tunnel. On the Pi, ingest feeds Hailo-8 perception, then the auto-MOB trigger and incident state machine, which drive drift, rover commands, the SQLite log and the coordinator gateway to the Mac browser over wired Ethernet.](docs/architecture.svg)
