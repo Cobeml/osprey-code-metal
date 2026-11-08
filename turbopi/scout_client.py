@@ -44,6 +44,7 @@ import os
 import signal
 import struct
 import sys
+import threading
 import time
 import uuid
 
@@ -91,7 +92,8 @@ TURN_DEG_PER_S = 280.0    # venue TurboPi: ~170 deg/s at turn=0.3 (camera-measur
 SEARCH_TURN = 0.2
 EXTRA_SEARCH_M = 1.0      # keep driving this far past the dispatch distance before spinning
 LOST_TO_SEARCH_S = 3.0    # lost target this long while approaching -> search again
-LOCK_GATE = 0.25          # max box-centre jump (fraction of frame) that still counts as the lock
+LOCK_GATE = 0.4           # max box-centre jump (fraction of frame) that still counts as the lock
+                          # (0.25 dropped good locks while the rover turned; one green ball in the demo)
 APPROACH_TURN_GAIN = 0.5  # turns ~3x faster than first assumed: was 1.2 and overshot
 APPROACH_MAX_TURN = 0.25
 APPROACH_ALIGN_ERR = 0.25  # turn in place until the target is within this of centre
@@ -105,8 +107,8 @@ ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
 CAM_HFOV_DEG = 70.0       # measured on the venue TurboPi: 15 deg of pan moved the ball 0.29 of the (portrait,
                           # x0.75) width -> ~52 deg across portrait, ~70 deg landscape. Listings say 120.
 PAN_LIMIT_DEG = 80.0
-PAN_GAIN = 0.6            # fraction of the image error (in deg) corrected per tick
-PAN_MAX_STEP_DEG = 6.0    # per tick (~10 Hz)
+PAN_GAIN = 0.5            # fraction of the image error (in deg) corrected per tick
+PAN_MAX_STEP_DEG = 4.0    # per tick (~10 Hz)
 PAN_DEADBAND_DEG = 2.0
 PAN_SWEEP_DEG = 70.0      # search sweep half-width
 PAN_SWEEP_DEG_PER_S = 60.0
@@ -287,7 +289,12 @@ class Rover:
 
     # ----------------------------------------------------------- pan camera
     def _set_pan(self, deg: float) -> None:
-        self.pan_deg = _clamp(deg, -PAN_LIMIT_DEG, PAN_LIMIT_DEG)
+        new = _clamp(deg, -PAN_LIMIT_DEG, PAN_LIMIT_DEG)
+        if self.lock_centre is not None and new != self.pan_deg:
+            # panning right moves the ball left in the image: move the lock window with it
+            lx, ly = self.lock_centre
+            self.lock_centre = (lx - (new - self.pan_deg) / CAM_HFOV_DEG, ly)
+        self.pan_deg = new
         self.hw.set_pan(self.pan_deg)
 
     def _track_pan(self, ex: float, sighting_ts: float) -> None:
@@ -564,6 +571,20 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
     cap = cv2.VideoCapture(cam_index)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    # the camera runs faster than we process: a reader thread keeps only the newest frame, so the
+    # controller never steers on a queued, seconds-old image
+    latest = {"f": None, "n": 0}
+
+    def reader():
+        while True:
+            ok_, f_ = cap.read()
+            if ok_:
+                latest["f"], latest["n"] = f_, latest["n"] + 1
+            else:
+                time.sleep(0.02)
+    threading.Thread(target=reader, daemon=True).start()
+    used = [0]
     outbox: list = []
     rover = Rover(hw, lambda st: outbox.append({"type": "rover_state", "state": st,
                                                 "onboard": rover.onboard()}))
@@ -573,7 +594,12 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
     n = [0]
 
     def grab():
-        ok, frame = cap.read()
+        t_end = time.time() + 0.5
+        while latest["n"] == used[0] and time.time() < t_end:
+            time.sleep(0.005)
+        used[0] = latest["n"]
+        frame = latest["f"]
+        ok = frame is not None
         if ok and rot is not None:  # upright before the onboard lock and the ground both see it
             frame = cv2.rotate(frame, rot)
         n[0] += 1
@@ -657,6 +683,8 @@ def main():
     ap.add_argument("--pan-id", type=int, default=1)
     ap.add_argument("--pan-center", type=float, default=1500.0, help="pulse (us) that points straight ahead")
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
+    ap.add_argument("--tilt-id", type=int, default=2, help="tilt servo (venue TurboPi: 2)")
+    ap.add_argument("--tilt-us", type=float, default=1500.0, help="tilt pulse set at start; 0 = leave it")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
     _exit_on_sigterm()
@@ -674,6 +702,9 @@ def main():
     if pan is not None and a.hw != "hiwonder":
         ap.error("--pan-call needs --hw hiwonder")
     hw = HiwonderHardware(pan=pan) if a.hw == "hiwonder" else NoHardware()
+    if a.hw == "hiwonder" and a.tilt_us > 0 and pan is not None:
+        pan.fn(a.tilt_id, int(a.tilt_us), 300)   # camera level, pan centred
+        pan.set(0.0)
     if a.selftest:
         selftest(hw)
         return

@@ -366,3 +366,18 @@ def test_pan_right_is_lower_pulse_on_the_venue_rover():
     s.set(30.0)
     s.set(-30.0)
     assert calls == [(1, 1167), (1, 1833)]
+
+
+def test_lock_window_moves_with_the_pan(monkeypatch):
+    """Panning right shifts the ball left in the image: the lock must not drop it for that."""
+    t = [100.0]
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    r = sc.Rover(PanHW(), lambda s: None)
+    r.on_local({"bbox": (0.6, 0.4, 0.8, 0.6), "confidence": 0.9})     # locked at x = 0.7
+    r._set_pan(20.0)                                                     # camera turns right 20 deg
+    assert abs(r.lock_centre[0] - (0.7 - 20.0 / sc.CAM_HFOV_DEG)) < 1e-9
+    # the ball now appears where the pan put it, well over the old gate from 0.7: still our lock
+    nx = 0.7 - 20.0 / sc.CAM_HFOV_DEG
+    t[0] += 0.1
+    r.on_local([{"bbox": (nx - 0.1, 0.4, nx + 0.1, 0.6), "confidence": 0.9}])
+    assert r.local_ts == t[0]
