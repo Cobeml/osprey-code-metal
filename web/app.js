@@ -171,11 +171,11 @@ function renderTimeline() {
 renderTimeline();
 
 // ------------------------------------------------------------------ chart
-const map = L.map("chart", { zoomControl: true, attributionControl: true }).setView([42.35, -70.8], 17);
+const map = L.map("chart", { zoomControl: true, attributionControl: true, maxZoom: 22 }).setView([42.35, -70.8], 17);
 // Esri Ocean basemap (keyless, bathymetry shading). The chart's own sea-blue background stands in
 // when the venue has no internet, so it still reads as water.
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-  { maxZoom: 20, maxNativeZoom: 13, attribution: "Tiles © Esri — GEBCO, NOAA, Garmin, HERE" }).addTo(map);
+  { maxZoom: 22, maxNativeZoom: 13, attribution: "Tiles © Esri — GEBCO, NOAA, Garmin, HERE" }).addTo(map);
 L.control.scale({ imperial: true, metric: true, position: "bottomright" }).addTo(map);
 
 // ---- nautical furniture: lat/lon graticule with degree-minute labels, compass rose
@@ -244,7 +244,7 @@ const layers = {
   trails: { A: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map),
             B: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map) },
   shipFix: L.circleMarker([0, 0], { radius: 7, weight: 3, fillOpacity: 1 })
-    .bindTooltip("", { permanent: true, direction: "left", className: "mk-label fix", offset: [-10, 0] }),
+    .bindTooltip("", { permanent: true, direction: "bottom", className: "mk-label fix", offset: [0, 10] }),
   shipLine: L.polyline([], { color: "#12b76a", weight: 2, dashArray: "4 4", interactive: false })
     .bindTooltip("", { permanent: true, direction: "center", className: "mk-label dist" }),
   sight: {}, cand: {},
@@ -254,22 +254,26 @@ let shipHdg = null;
 let mapCentered = false, lastIncident = null, userMovedAt = 0;
 map.on("dragstart zoomstart", (e) => { if (!autoFitting) userMovedAt = Date.now(); });
 let autoFitting = false;
-const MAX_FIT_ZOOM = 20;   // close enough that a deck-cam fix 1-2 m off the hull is visibly apart
 map.on("zoomend", () => $("#chart").classList.toggle("zoom-close", map.getZoom() >= 19));
 function autoFit() {
   if (!snap || Date.now() - userMovedAt < 15000) return;
-  const pts = [[snap.ship.lat, snap.ship.lon]];
+  let pts = [[snap.ship.lat, snap.ship.lon]];
   const inc = snap.incident;
+  // deck camera holds the ball: frame just the ship and the fix so the measured range reads
+  const sf = snap.nodes.ship && snap.nodes.ship.last_accepted, la0 = snap.last_accepted;
+  const shipFocus = !!(sf && sf.location && la0 && la0.node_id === "ship" && nowS() - sf.capture_ts <= 6.0);
   if (inc && inc.mob_location) pts.push([inc.mob_location.lat, inc.mob_location.lon]);
   for (const n of ["ship", "A", "B"]) { const la = snap.nodes[n] && snap.nodes[n].last_accepted; if (la && la.location) pts.push([la.location.lat, la.location.lon]); }
   for (const c of allCandidates()) if (c.location) pts.push([c.location.lat, c.location.lon]);
   if (snap.drift) pts.push(...snap.drift.hull90);
+  if (shipFocus) pts = [[snap.ship.lat, snap.ship.lon], [sf.location.lat, sf.location.lon]];
+  const maxZ = shipFocus ? 22 : 19;
   const b = L.latLngBounds(pts);
   const view = map.getBounds().pad(-0.1);
-  const want = Math.min(MAX_FIT_ZOOM, map.getBoundsZoom(b.pad(0.3)));
-  if (!view.contains(b) || want - map.getZoom() >= 1) {
+  const want = Math.min(maxZ, map.getBoundsZoom(b.pad(shipFocus ? 2.5 : 0.3)));
+  if (!view.contains(b) || want - map.getZoom() >= 1 || map.getZoom() - want >= 2) {
     autoFitting = true;
-    map.fitBounds(b.pad(0.25), { maxZoom: MAX_FIT_ZOOM, animate: true });
+    map.fitBounds(b.pad(shipFocus ? 2.5 : 0.25), { maxZoom: maxZ, animate: true });
     setTimeout(() => (autoFitting = false), 600);
   }
 }
@@ -350,7 +354,9 @@ function renderChart() {
     lab.innerHTML = `<h4>Position fixed <span class="badge real">SIGHTING</span></h4>` +
       `<div class="fine"><span class="fix">Drift area collapsed to ${la.node_id === "ship" ? "the deck camera's fix" : "Scout " + la.node_id + "'s sighting"}.</span> ` +
       `${snap.dispatch && snap.dispatch.handoff ? "Fix sent to the rover. " : ""}` +
-      `${la.node_id === "ship" ? "Green ball classified by colour; range from stereo depth, relative to the ship." : "Coordinates simulated (no GPS)."}</div>`;
+      `${la.node_id !== "ship" ? "Coordinates simulated (no GPS)."
+        : la.location && la.location.provenance === "real_relative" ? "Green ball classified by colour; range from stereo depth, relative to the ship."
+        : "Simulated deck-camera fix (demo control)."}</div>`;
     clearTimeout(fixLabelTimer);
     fixLabelTimer = setTimeout(() => { fixLabelTimer = null; if (!snap.drift) lab.classList.add("hidden"); }, 6000);
   } else if (!collapse) {
@@ -364,7 +370,9 @@ function renderChart() {
     const dist = L.latLng(ship).distanceTo(p);
     layers.shipFix.setLatLng(p).addTo(map).setStyle({ fillColor: fresh ? "#12b76a" : "#fff", color: fresh ? "#fff" : "#12b76a",
       dashArray: fresh ? null : "3 3" });
-    layers.shipFix.setTooltipContent(`Deck cam fix · ${fresh ? "now" : fmtAge(age) + " ago"} <span class="badge real">MEASURED</span>`);
+    const measured = sf.location.provenance === "real_relative";
+    layers.shipFix.setTooltipContent(`Deck cam fix · ${fresh ? "now" : fmtAge(age) + " ago"} ` +
+      (measured ? '<span class="badge real">MEASURED</span>' : SIM));
     layers.shipLine.setLatLngs([ship, p]).addTo(map);
     layers.shipLine.setTooltipContent(`${dist.toFixed(1)} m`);
   } else { layers.shipFix.remove(); layers.shipLine.remove(); }
@@ -383,8 +391,9 @@ function renderChart() {
       }
       glide(m, [la.location.lat, la.location.lon]);
       const tp = trailPts[n], last = tp[tp.length - 1];
-      if (!last || last[0] !== la.location.lat || last[1] !== la.location.lon) {
-        tp.push([la.location.lat, la.location.lon]); if (tp.length > 24) tp.shift();
+      // trail points only after real movement (>= 6 m), so sighting jitter doesn't scribble
+      if (!last || L.latLng(last).distanceTo([la.location.lat, la.location.lon]) >= 6) {
+        tp.push([la.location.lat, la.location.lon]); if (tp.length > 10) tp.shift();
       }
       layers.trails[n].setLatLngs(tp).setStyle({ color: NODE_COLORS[n] });
       m.setStyle({ color: fresh ? "#fff" : NODE_COLORS[n], fillColor: fresh ? NODE_COLORS[n] : "#fff", fillOpacity: 1, dashArray: fresh ? null : "3 3" });
