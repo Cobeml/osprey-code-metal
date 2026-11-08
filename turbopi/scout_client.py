@@ -96,15 +96,21 @@ LOCK_GATE = 0.4           # max box-centre jump (fraction of frame) that still c
                           # (0.25 dropped good locks while the rover turned; one green ball in the demo)
 APPROACH_TURN_GAIN = 0.5  # turns ~3x faster than first assumed: was 1.2 and overshot
 APPROACH_MAX_TURN = 0.2
-APPROACH_MIN_TURN = 0.12  # below this the motors don't move the body (trace: 0.145 turns it)
+APPROACH_MIN_TURN = 0.15  # below this the motors don't reliably move the body in place (0.12 stalled;
+                          # trace: 0.145 turns it). While driving, smaller yaw works (wheels already turn)
+INPLACE_BOOST_PER_S = 0.08  # turning in place this long without lining up: push harder (stall / low battery)
+INPLACE_MAX_TURN = 0.3
 APPROACH_TURN_DEADBAND = 0.05
 TURN_FRESH_S = 0.4        # only turn on a sighting this recent; blurred frames pause the turn
 PAN_HANDOFF_DEG = 10.0    # camera found the ball further off-axis than this: body turns toward
                           # the camera's angle while the camera keeps the ball in view
-APPROACH_ALIGN_ERR = 0.15  # turn in place until the target is within this of centre
+APPROACH_ALIGN_ERR = 0.35  # turn in place only when the target is further off than this (~21 deg);
+                           # inside it, drive at it and steer. 0.15 made the rover stop and turn on
+                           # every noisy frame at ~1 m (err jumps +-0.2) and it often never closed in
 APPROACH_SPEED = 0.6       # fraction of DRIVE_SPEED while approaching
 HOLD_DEADBAND = 0.08      # while arrived, turn to re-centre when the ball is off-centre by more
-REAPPROACH_FRAC = 0.7     # while arrived, drive after the ball when its box shrinks below this
+REAPPROACH_FRAC = 0.85    # while arrived, drive after the ball when its box shrinks below this share
+                          # of the arrival size (0.7 let a ball ~1.4x further away sit unchased)
 ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as "arrived"
 ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.35, "none": 0.85}  # green: with a level camera the
 # ball slipped under the view at ~0.24 of the frame height; the tilt now follows it down
@@ -127,7 +133,12 @@ PAN_MAX_STEP_DEG = 4.0    # per tick (~10 Hz)
 PAN_DEADBAND_DEG = 2.0
 PAN_SWEEP_DEG = 70.0      # search sweep half-width
 PAN_SWEEP_DEG_PER_S = 60.0
-SEARCH_SPIN_S = 0.35      # after a full sweep with nothing seen, spin the body this long (~50 deg)
+SEARCH_SPIN_DEG = 75.0    # after a full camera sweep with nothing seen, turn the body this far to a
+                          # fresh sector (sweep +-70 deg + 60 deg FOV covers ~200 deg, so 60-90 overlaps)
+SEARCH_SPIN_TURN = 0.3    # 0.2 for 0.35 s turned the venue rover only ~10 deg
+SEARCH_SPIN_DEG_PER_S = 170.0  # measured at turn 0.3 on the venue rover (camera, rough)
+SEARCH_SPIN_LAG_S = 0.15  # motors take this long to get going from standstill
+SEARCH_SPIN_S = SEARCH_SPIN_DEG / SEARCH_SPIN_DEG_PER_S + SEARCH_SPIN_LAG_S   # ~0.6 s; --spin-s overrides
 ARRIVED_BODY_DEG = 20.0   # (unused since the body alone steers at the ball)
 ARRIVED_HOLD_ERR = 0.1    # at the ball: hold still while it is within this of centre
 
@@ -325,6 +336,7 @@ class Rover:
         self.sweep_dir = 1.0
         self.half_sweeps = 0
         self.spin_until = 0.0
+        self.inplace_since = None  # when the current turn-in-place began (stall boost)
         self.last_tick = None
 
     # ----------------------------------------------------------- pan camera
@@ -389,6 +401,20 @@ class Rover:
         mag = _clamp(APPROACH_TURN_GAIN * abs(b), APPROACH_MIN_TURN, APPROACH_MAX_TURN)
         return mag if b > 0 else -mag
 
+    def _turn_in_place(self, b: float, now: float, fresh_turn: bool) -> None:
+        """Turn toward bearing b with the body still; the longer it has been turning in place
+        without lining up, the harder it pushes, so a stalled turn never leaves it stuck."""
+        if self.inplace_since is None:
+            self.inplace_since = now
+        if not fresh_turn:
+            self.hw.drive(0.0, 0.0)
+            return
+        turn = self._body_turn(b)
+        if turn:
+            mag = min(INPLACE_MAX_TURN, abs(turn) + INPLACE_BOOST_PER_S * (now - self.inplace_since))
+            turn = mag if turn > 0 else -mag
+        self.hw.drive(0.0, turn)
+
     def _bearing(self, ex: float) -> float:
         """Target direction relative to the body, as a fraction of the camera's field of view
         (equals the image error when the camera faces straight ahead)."""
@@ -397,8 +423,11 @@ class Rover:
     def _search(self, now: float, dt: float) -> None:
         """With a pan camera: sweep it with the body still, spin the body after each full sweep.
         Without one: spin the body."""
-        if not self.hw.has_pan or now < self.spin_until:
+        if not self.hw.has_pan:
             self.hw.drive(0.0, SEARCH_TURN)
+            return
+        if now < self.spin_until:
+            self.hw.drive(0.0, SEARCH_SPIN_TURN)
             return
         self.hw.stop()
         nxt = self.pan_deg + self.sweep_dir * PAN_SWEEP_DEG_PER_S * dt
@@ -474,6 +503,7 @@ class Rover:
     # ----------------------------------------------------------- commands
     def set(self, state: str) -> None:
         if state != self.state:
+            self.inplace_since = None
             if state == "searching" and self.tilt_us is not None:
                 self._set_tilt(self.hw.tilt_base_us)   # search at the start tilt, not at the floor
                 self.last_cy = 0.5
@@ -560,20 +590,19 @@ class Rover:
             ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
             fresh_turn = now - ts <= TURN_FRESH_S
             if abs(self.pan_deg) > PAN_HANDOFF_DEG:
-                # the search sweep found it off-axis: snapping the camera back would lose it.
-                # Camera keeps the ball centred; the body turns toward the camera's angle (not the
-                # image error, so the two don't fight) until it has caught up.
+                # the search sweep found it off-axis: snapping the camera back would lose it. The
+                # camera keeps the ball centred while the body turns toward it (it hands over once
+                # the pan is back near 0)
                 self._track_pan(guide["err"][0], ts)
-                turn = APPROACH_MIN_TURN if self.pan_deg > 0 else -APPROACH_MIN_TURN
-                self.hw.drive(0.0, turn if fresh_turn else 0.0)
-                return
-            if self.pan_deg != 0.0:
+                b = self._bearing(guide["err"][0])
+            elif self.pan_deg != 0.0:
                 # one steerer at a time: centre the camera (the lock window follows) and let the
                 # body turn by the full bearing; pan + body together overshot and oscillated
                 self._set_pan(0.0)
-            if abs(b) > APPROACH_ALIGN_ERR:   # well off-centre: turn in place (needs the minimum)
-                self.hw.drive(0.0, self._body_turn(b) if fresh_turn else 0.0)
-            else:                             # roughly centred: drive and steer gently (no minimum)
+            if abs(b) > APPROACH_ALIGN_ERR:   # well off to the side: turn in place first
+                self._turn_in_place(b, now, fresh_turn)
+            else:                             # roughly ahead: always close in, steering as it goes
+                self.inplace_since = None
                 steer = 0.0 if abs(b) <= APPROACH_TURN_DEADBAND or not fresh_turn else \
                     _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN)
                 self.hw.drive(DRIVE_SPEED * APPROACH_SPEED, steer)
@@ -594,8 +623,9 @@ class Rover:
                 self.set("approaching")  # ball moved away: drive after it
             elif abs(b) > hold:
                 ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
-                self.hw.drive(0.0, self._body_turn(b) if now - ts <= TURN_FRESH_S else 0.0)
+                self._turn_in_place(b, now, now - ts <= TURN_FRESH_S)
             else:
+                self.inplace_since = None
                 self.hw.stop()  # close and within the hold band: hold
 
 
@@ -807,11 +837,17 @@ def main():
     # venue TurboPi (upright mount): lower pulse = camera up; 1200-1500 point at the floor,
     # 800-900 is about level; 1000 (slightly down) keeps a close ball in frame on arrival
     ap.add_argument("--tilt-us", type=float, default=1000.0, help="tilt pulse set at start; 0 = leave it")
+    ap.add_argument("--spin-deg", type=float, default=SEARCH_SPIN_DEG,
+                    help="body turn between camera sweeps while searching (timed, no encoders)")
+    ap.add_argument("--spin-s", type=float, default=0.0,
+                    help="override: spin duration in seconds (0 = from --spin-deg and the measured rate)")
     ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
-    global TRACE
+    global TRACE, SEARCH_SPIN_S
     TRACE = TRACE or a.trace
+    SEARCH_SPIN_S = a.spin_s if a.spin_s > 0 else a.spin_deg / SEARCH_SPIN_DEG_PER_S + SEARCH_SPIN_LAG_S
+    print(f"search spin: {SEARCH_SPIN_S:.2f} s at turn {SEARCH_SPIN_TURN} (~{a.spin_deg:.0f} deg)")
     _exit_on_sigterm()
     if a.probe:
         probe()

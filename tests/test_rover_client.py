@@ -255,7 +255,21 @@ def test_pan_search_sweeps_camera_before_spinning_body(monkeypatch):
     step = sc.PAN_SWEEP_DEG_PER_S * 0.1
     assert max(pans) >= sc.PAN_SWEEP_DEG - 1e-6 and min(pans) <= -sc.PAN_SWEEP_DEG + step
     assert ("stop" in [c for _, c in seen])                      # body still while sweeping
-    assert (0.0, sc.SEARCH_TURN) in [c for _, c in seen]        # then a body spin step
+    assert (0.0, sc.SEARCH_SPIN_TURN) in [c for _, c in seen]   # then a body spin step
+
+
+def test_search_spin_turns_a_fresh_sector_not_a_nudge(monkeypatch):
+    """Venue: 0.2 for 0.35 s turned ~10 deg. The spin between sweeps should be 60-90 deg."""
+    deg = (sc.SEARCH_SPIN_S - sc.SEARCH_SPIN_LAG_S) * sc.SEARCH_SPIN_DEG_PER_S
+    assert 60 <= deg <= 90 and sc.SEARCH_SPIN_TURN >= 0.3
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    spin_ticks = 0
+    for _ in range(80):
+        t[0] += 0.1
+        r.tick()
+        spin_ticks += hw.cmds[-1] == (0.0, sc.SEARCH_SPIN_TURN)
+    assert spin_ticks * 0.1 >= sc.SEARCH_SPIN_S - 0.1     # one whole spin, not one tick
 
 
 def test_approach_centres_camera_and_body_turns_by_full_bearing(monkeypatch):
@@ -281,7 +295,7 @@ def test_found_far_off_axis_body_turns_while_camera_holds_the_ball(monkeypatch):
     r.tick()
     r.tick()
     assert r.state == "approaching" and r.pan_deg == 40.0    # camera stays on the ball
-    assert hw.cmds[-1] == (0.0, sc.APPROACH_MIN_TURN)         # body turns right toward it
+    assert hw.cmds[-1][0] == 0.0 and hw.cmds[-1][1] >= sc.APPROACH_MIN_TURN  # body turns right
     # as the body turns the ball drifts left in the image and the camera follows it back
     for _ in range(20):
         t[0] += 0.1
@@ -294,7 +308,7 @@ def test_no_turn_on_a_stale_sighting(monkeypatch):
     t = [1000.0]
     r, hw = _pan_rover(monkeypatch, t)
     r._set_pan(0.0)
-    r.on_local([box(0.8, 0.5, 0.1)])
+    r.on_local([box(0.9, 0.5, 0.1)])
     r.tick()
     r.tick()
     assert hw.cmds[-1][1] > 0                # fresh: turns toward it
@@ -474,3 +488,50 @@ def test_search_restores_the_start_tilt(monkeypatch):
         t[0] += 0.2
         r.tick()
     assert r.state == "searching" and r.tilt_us == 1000.0
+
+
+def test_always_closes_in_on_a_ball_a_bit_off_centre(monkeypatch):
+    """~1.2 m away (box 0.06) and 0.25 off-centre: drive at it and steer, don't sit turning."""
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.5, 0.5, 0.06)])
+    r.tick()                                 # searching -> approaching
+    for ex in (0.25, -0.1, 0.15, 0.25):     # noisy frames, as in the venue trace
+        t[0] += 0.1
+        r.on_local([box(0.5 + ex, 0.5, 0.06)])
+        r.tick()
+        f, turn = hw.cmds[-1]
+        assert f > 0 and (turn > 0) == (ex > 0)
+
+
+def test_stalled_turn_in_place_pushes_harder(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.95, 0.5, 0.06)])
+    r.tick()                                 # searching -> approaching
+    turns = []
+    for _ in range(20):                      # 2 s, ball stays 0.45 right: the body is not moving
+        t[0] += 0.1
+        r.on_local([box(0.95, 0.5, 0.06)])
+        r.tick()
+        turns.append(hw.cmds[-1][1])
+    assert turns[0] >= sc.APPROACH_MIN_TURN and turns[-1] > turns[0]
+    assert max(turns) <= sc.INPLACE_MAX_TURN
+
+
+def test_arrived_chases_a_ball_that_moved_a_little_further(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.5, 0.5, 0.4)])
+    r.tick()
+    r.tick()
+    assert r.state == "arrived"
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.5, 0.28)])        # ~1.25x further away than on arrival
+    r.tick()
+    assert r.state == "approaching"
