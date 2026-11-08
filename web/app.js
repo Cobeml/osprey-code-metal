@@ -351,7 +351,7 @@ function renderFeeds() {
     if (isRover && snap.dispatch && snap.dispatch.status === "arrived") {
       pill = "ON SCENE";
       const ob = snap.dispatch.onboard;
-      if (ob && ob.color === "green") pillNote = " · green confirmed onboard";
+      if (ob && (ob.label || ob.color)) pillNote = ` · ${ob.label || ob.color} confirmed onboard`;
     }
     const SRC = { sim: ["SIM", ""], file: ["RECORDED", ""], usb: ["LIVE FPV", "real"], aurora: ["AURORA", "real"], ws: ["LIVE", "real"], uvc: ["LIVE", "real"] };
     if (ns) {
@@ -365,7 +365,7 @@ function renderFeeds() {
     const vid = tile.querySelector(".video");
     let tg = vid.querySelector(".target");
     if (!tg) { tg = document.createElement("div"); tg.className = "target"; vid.appendChild(tg); }
-    tg.textContent = ns && ns.target && node !== "ship" ? "target: " + (ns.target === "ball" ? "green ball" : ns.target) : "";
+    tg.textContent = ns && ns.target && node !== "ship" ? "target: " + (ns.target === "ball" ? "green ball" : ns.target.replace("+", " + ")) : "";
     const pe = tile.querySelector(".pill");
     pe.textContent = pill + pillNote + (linkUp || !snap ? "" : " · as of link loss");
     pe.className = "pill " + pill.replace(" ", "_");

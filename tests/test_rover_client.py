@@ -19,6 +19,7 @@ class HW(sc.NoHardware):
 
 
 def test_dispatch_search_approach_arrive(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
     t = [1000.0]
     monkeypatch.setattr(sc.time, "time", lambda: t[0])
     hw, states = HW(), []
@@ -59,6 +60,7 @@ def _searching_rover(monkeypatch, t):
 
 
 def test_onboard_green_steers_when_ground_has_no_box(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
     t = [1000.0]
     r, hw = _searching_rover(monkeypatch, t)
     r.on_local({"bbox": (0.45, 0.4, 0.55, 0.6), "confidence": 0.8}, decoys=1)
@@ -95,3 +97,22 @@ def test_stop_wins():
     r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 1})
     r.on_command({"type": "stop"})
     assert r.state == "stopped" and hw.cmds[-1] == "stop"
+
+
+def test_person_arrives_only_when_close(monkeypatch):
+    t = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["person"])
+    hw = HW()
+    r = sc.Rover(hw, lambda s: None)
+    r.onboard_label = "person"
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 0.0})
+    r.tick(); r.tick(); r.tick()
+    r.on_command({"type": "follow", "err": [0.0, 0.0], "size": 0.6})  # person still a few m away
+    r.tick()
+    assert r.state == "approaching"
+    r.on_local({"bbox": (0.3, 0.05, 0.7, 0.95), "confidence": 0.8})
+    r.on_command({"type": "follow", "err": [0.0, 0.0], "size": 0.9})
+    r.tick()
+    assert r.state == "arrived"
+    assert r.onboard()["label"] == "person"

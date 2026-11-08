@@ -12,11 +12,12 @@ Dispatch flow (rover starts beside the deck camera, facing along its optical axi
   toward the box and creep forward until the box is big enough -> "arrived" (stop).
   Every state change is reported as {"type":"rover_state","state":...,"onboard":{...}}.
 
-Onboard colour check: the rover's own Pi runs the same green/red ball classifier as the ground
-(src/osprey/perception/ballcolor.py; copy it next to this file or run from the repo). While the
-link is up but the ground has no fresh follow error (e.g. the ground lost the box), the rover
-steers on its own green-ball detection; red balls are decoys and never steer it. Ground follow
-errors take priority, stop always wins, and the rover still stops if the link drops.
+Onboard check (--onboard): "person" (default) runs OpenCV's HOG people detector on the rover's
+own Pi (no Hailo there); "green" runs the ground's green/red ball classifier
+(src/osprey/perception/ballcolor.py; copy it next to this file or run from the repo); "none"
+means ground guidance only. While the link is up but the ground has no fresh follow error, the
+rover steers on its own onboard sighting (red balls never steer it). Ground follow errors take
+priority, stop always wins, and the rover still stops if the link drops.
 
 Protocol: binary uint32 LE header_len | header JSON | JPEG, header {node_id, session_id, seq,
 capture_ts_ms, width, height}; clock pings {"ping": ms} -> {"pong","srv"} -> {"sync","srv","recv"}.
@@ -93,7 +94,34 @@ DRIVE_SPEED = 0.5         # fraction of max
 DRIVE_M_PER_S = 0.25      # measured ground speed at DRIVE_SPEED
 TURN_DEG_PER_S = 90.0     # measured spin rate at turn=0.5
 SEARCH_TURN = 0.25
-ARRIVE_BOX_H = 0.45       # target box height (fraction of frame) that counts as "arrived"
+ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as "arrived"
+ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
+
+
+class PersonHOG:
+    """OpenCV's built-in HOG + linear SVM people detector: no model files, CPU only."""
+
+    def __init__(self, width: int = 320):
+        import cv2
+
+        self.cv2 = cv2
+        self.width = width
+        self.hog = cv2.HOGDescriptor()
+        self.hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+    def best(self, frame):
+        cv2 = self.cv2
+        h, w = frame.shape[:2]
+        s = self.width / float(w)
+        small = cv2.resize(frame, (self.width, int(h * s)))
+        rects, weights = self.hog.detectMultiScale(small, winStride=(8, 8), padding=(8, 8), scale=1.05)
+        if len(rects) == 0:
+            return None
+        i = int(max(range(len(rects)), key=lambda k: float(weights[k])))
+        x, y, bw, bh = rects[i]
+        sh, sw = small.shape[:2]
+        conf = float(min(0.99, max(0.0, 0.5 + 0.25 * float(weights[i]))))
+        return {"bbox": (x / sw, y / sh, (x + bw) / sw, (y + bh) / sh), "confidence": conf}
 
 
 class Rover:
@@ -124,7 +152,8 @@ class Rover:
     def onboard(self) -> dict:
         """What the rover's own camera says, reported with every state change."""
         fresh = self.local is not None and time.time() - self.local_ts <= STALE_S
-        return {"color": "green" if fresh else None,
+        label = getattr(self, "onboard_label", "green")
+        return {"label": label if fresh else None, "color": "green" if fresh and label == "green" else None,
                 "confidence": round(self.local["confidence"], 2) if fresh else None,
                 "decoys": self.decoys, "guide": self.guide_src,
                 "classifier": ballcolor is not None}
@@ -236,9 +265,13 @@ class Follower:
         return self.mode
 
 
-async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0):
+async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
+              onboard: str = "person"):
     import cv2
 
+    global ARRIVE_BOX_H
+    ARRIVE_BOX_H = ARRIVE_BY_TARGET.get(onboard, ARRIVE_BOX_H)
+    person = PersonHOG() if onboard == "person" else None
     cap = cv2.VideoCapture(cam_index)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -246,12 +279,17 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0):
     outbox: list = []
     rover = Rover(hw, lambda st: outbox.append({"type": "rover_state", "state": st,
                                                 "onboard": rover.onboard()}))
-    if ballcolor is None:
+    rover.onboard_label = onboard
+    if onboard == "green" and ballcolor is None:
         print("onboard classifier unavailable (ballcolor.py not found): ground guidance only")
+    n = [0]
 
     def grab():
         ok, frame = cap.read()
-        if ok and ballcolor is not None:
+        n[0] += 1
+        if ok and person is not None and n[0] % 2 == 0:  # HOG every other frame (~5 Hz)
+            rover.on_local(person.best(frame))
+        elif ok and onboard == "green" and ballcolor is not None:
             res = ballcolor.find_balls(frame)
             rover.on_local(res["target"], len(res["decoys"]))
         return ok, frame
@@ -318,9 +356,10 @@ def main():
     ap.add_argument("--node", default="B")
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--hw", default="none", choices=["none", "hiwonder"])
+    ap.add_argument("--onboard", default="person", choices=["person", "green", "none"])
     a = ap.parse_args()
     hw = HiwonderHardware() if a.hw == "hiwonder" else NoHardware()
-    asyncio.run(run(a.url, a.camera, hw, a.node))
+    asyncio.run(run(a.url, a.camera, hw, a.node, onboard=a.onboard))
 
 
 if __name__ == "__main__":

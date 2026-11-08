@@ -31,9 +31,9 @@ The drone has no onboard recording or GPS; its camera goes out over analog 5.8 G
 
 **Checkpoint:** "Drone receiver plugged into the Pi." Claude checks `/api/video_devices`, switches Scout A to `usb`, and tunes the green-ball detector.
 
-## H2b. Green foam ball = person in the water
+## H2b. Target: a person
 
-The scouts look for a **green foam ball** (person-in-water stand-in; COCO "sports ball" + green color detector). Pick a saturated green that doesn't match anything else in the room; keep green tape/clothing out of the water area.
+All three cameras (deck cam, phone/drone, rover) now look for a **person** (Hailo yolov8s on the Pi). The "person in the water" is a teammate in the water area. The green-target / red-decoy ball classifier is still available: set `target_A: ball` and `target_B: ball` in `config.yaml`. The rover's own onboard check uses OpenCV's HOG people detector (`--onboard person`); it needs a mostly full, standing body in view, so ground guidance does most of the work.
 
 ## H2. Phone scout (≈5 min) — optional fallback for either scout
 

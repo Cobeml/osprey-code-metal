@@ -378,7 +378,7 @@ class Ground:
         self.record([self.engine._ev("handoff", now, self.rover, **h)])  # noqa: SLF001
 
     def rover_report(self, state: str, onboard: Optional[dict] = None) -> None:
-        """onboard: the rover's own colour check, e.g. {"color": "green", "confidence": 0.9}."""
+        """onboard: the rover's own check, e.g. {"label": "person", "confidence": 0.9}."""
         if self.dispatch_state is not None:
             self.dispatch_state["status"] = state
             self.dispatch_state["status_ts"] = self.clock.now()
