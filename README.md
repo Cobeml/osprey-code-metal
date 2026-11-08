@@ -2,6 +2,18 @@
 
 Team 29, CodeMetal Forge 2026.
 
+**Landing page:** [`index.html`](index.html) runs the 3D mission simulation in the page, with the recorded Osprey MOB Coordinator run below it. Serve the repo root to view it locally: `python3 -m http.server 8088 --bind 127.0.0.1`, then open `http://127.0.0.1:8088/`.
+
+### Mission simulation (concept)
+
+Interactive, runs in the browser: [`simulation/`](simulation/README.md). Scripted sightings, illustrative vehicles, compressed scenario time.
+
+### Osprey MOB Coordinator (recorded run)
+
+[![Osprey MOB Coordinator during a man-overboard incident (click for the 91 s recording)](docs/media/coordinator.png)](docs/media/coordinator.mp4)
+
+Click the still for the 91 s screen recording. Items marked SIM are simulated; the drift area is an estimate.
+
 A ship's deck camera sees someone go over the rail and declares **man overboard** automatically. Two scout nodes (stand-ins for drones) search, the coordinator confirms the person, and the scouts lock on and follow. When comms drop or the person slips out of view, the coordinator's picture degrades honestly: last evidence with a ticking age, then a drift-driven search area. When contact returns, the picture recovers without stale data overwriting fresh data.
 
 | | |
