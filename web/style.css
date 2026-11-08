@@ -63,10 +63,10 @@ body.linklost #ribbon { display: flex; }
 body.linklost main, body.linklost footer { filter: grayscale(.7) opacity(.75); }
 
 /* ---------------------------------------------------------------- main, adaptive by phase */
-main { grid-row: 3; display: grid; grid-template-columns: 1fr 440px; gap: 12px; padding: 12px; min-height: 0;
+/* feeds get most of the width (2x2 grid), the chart a narrower column */
+main { grid-row: 3; display: grid; grid-template-columns: minmax(320px, .6fr) 1fr; gap: 12px; padding: 12px; min-height: 0;
   transition: grid-template-columns .45s cubic-bezier(.2,.8,.2,1); }
-body.ph-CANDIDATE main { grid-template-columns: 1fr 1.25fr; }
-body.ph-STANDBY main, body.ph-CONTACT_LOST main, body.ph-ENDED main { grid-template-columns: 1fr 360px; }
+body.ph-CANDIDATE main { grid-template-columns: minmax(300px, .5fr) 1fr; }
 
 #chart-wrap { position: relative; min-height: 0; overflow: hidden; background: var(--surface);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
@@ -97,7 +97,7 @@ body.ph-STANDBY main, body.ph-CONTACT_LOST main, body.ph-ENDED main { grid-templ
   text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
 @media (prefers-reduced-motion: reduce) { .ship-ic .wake, .set-line { animation: none; } }
 .overlay-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 12px rgba(16,24,40,.08); }
-#estimate-label { position: absolute; right: 12px; top: 12px; z-index: 500; width: 310px; padding: 12px 14px;
+#estimate-label { position: absolute; right: 12px; top: 12px; z-index: 500; width: min(310px, calc(100% - 70px)); padding: 12px 14px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 12px rgba(16,24,40,.08); }
 #estimate-label h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
 #estimate-label dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
@@ -137,8 +137,14 @@ body.ph-STANDBY main, body.ph-CONTACT_LOST main, body.ph-ENDED main { grid-templ
 .mob-x { color: var(--red); font: 900 24px Inter, sans-serif; margin: -13px 0 0 -7px; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 
 /* ---------------------------------------------------------------- feeds */
-#feeds { display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 12px; min-height: 0; transition: grid-template-rows .45s; }
-body.ph-CANDIDATE #feeds { grid-template-rows: 2.4fr 1fr 1fr; }
+#feeds { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0;
+  transition: grid-template-rows .45s; }
+#feeds .tile[data-node="A"] { order: 1; }
+#feeds .tile[data-node="B"] { order: 2; }
+#feeds .tile[data-node="ship"] { order: 3; grid-column: 1 / -1; }   /* drone + rover on top, deck cam below */
+body.ph-CANDIDATE #feeds { grid-template-rows: 1.7fr 1fr; }
+body.ph-CANDIDATE #feeds .tile.sel { order: -1; grid-column: 1 / -1; }  /* the sighting to decide: full top row */
+body.ph-CANDIDATE #feeds .tile[data-node="ship"]:not(.sel) { grid-column: auto; }
 .tile { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--surface);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); transition: border-color .2s, box-shadow .2s; }
 .tile.sel { border-color: var(--red); box-shadow: 0 0 0 3px rgba(217,45,32,.15), var(--shadow); order: -1; }
@@ -239,8 +245,7 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
   #banner { grid-template-columns: auto 1fr auto; }
   .status { flex-direction: column; align-items: flex-start; gap: 4px; }
   #subtitle { font-size: 13px; max-width: 100%; }
-  main { grid-template-columns: 1fr 340px; }
-  body.ph-CANDIDATE main { grid-template-columns: 1fr 1fr; }
+  main, body.ph-CANDIDATE main { grid-template-columns: minmax(280px, .55fr) 1fr; }
   #timeline { margin: 0 20px; }
 }
 @media (max-width: 860px) {
@@ -252,7 +257,8 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
   #banner .right .metric:nth-child(2) { display: none; }
   main, body.ph-CANDIDATE main, body.ph-STANDBY main, body.ph-CONTACT_LOST main, body.ph-ENDED main { grid-template-columns: 1fr; }
   #chart-wrap { height: 60vh; }
-  #feeds, body.ph-CANDIDATE #feeds { grid-template-rows: none; grid-auto-rows: 260px; }
+  #feeds, body.ph-CANDIDATE #feeds { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: 260px; }
+  #feeds .tile[data-node], body.ph-CANDIDATE #feeds .tile.sel { grid-column: auto; }
   #estimate-label { width: auto; left: 60px; }
   footer { grid-template-columns: 1fr; padding: 10px 16px; }
   #timeline { margin: 0 30px; }
