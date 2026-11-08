@@ -99,11 +99,11 @@ def classify_box(bgr: np.ndarray, bbox: tuple, green=GREEN_BANDS, red=RED_BANDS,
 
 
 def find_balls(bgr: np.ndarray, green=GREEN_BANDS, red=RED_BANDS) -> dict:
-    """Onboard helper: best green target box (or None) and the red decoy boxes in one frame."""
+    """Onboard helper: best green target box (or None), every green box, and the red decoys."""
     import cv2
 
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     greens = color_blobs(bgr, TARGET, green, hsv)
     reds = color_blobs(bgr, DECOY, red, hsv)
     target = max(greens, key=lambda d: d["confidence"]) if greens else None
-    return {"target": target, "decoys": reds}
+    return {"target": target, "greens": greens, "decoys": reds}
