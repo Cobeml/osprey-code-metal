@@ -357,3 +357,12 @@ def test_selftest_skip_sends_no_wheel_command(monkeypatch):
     monkeypatch.setattr(sc.time, "sleep", lambda s: None)
     sc.selftest(hw)
     assert all(c == (0, 0, 0) for c in ch.calls)   # only stops, never a move
+
+
+def test_pan_right_is_lower_pulse_on_the_venue_rover():
+    """Verified on the TurboPi: pulse 1167 turned the camera right, so +30 deg (right) -> 1167."""
+    calls = []
+    s = sc.PulseServo(lambda i, p, ms: calls.append((i, p)), 1, sign=-1.0)
+    s.set(30.0)
+    s.set(-30.0)
+    assert calls == [(1, 1167), (1, 1833)]

@@ -638,13 +638,13 @@ def main():
     ap.add_argument("--onboard", default="green", choices=["person", "green", "none"])
     ap.add_argument("--selftest", action="store_true", help="guarded chassis/pan moves, no network")
     ap.add_argument("--probe", action="store_true", help="list the Hiwonder SDK's servo/chassis calls; moves nothing")
-    ap.add_argument("--pan-call", default="", help="pan servo call fn(id, pulse_us, ms), e.g. "
-                    "HiwonderSDK.Board:setPWMServoPulse (find it with --probe); empty = no pan")
-    ap.add_argument("--pan-id", type=int, default=2)
+    ap.add_argument("--pan-call", default="auto", help="pan servo call fn(id, pulse_us, ms); auto = "
+                    "HiwonderSDK.Board:setPWMServoPulse with --hw hiwonder; none = no pan (body steers)")
+    # verified on the venue TurboPi (Pi 5 image): servo 1 pans, servo 2 tilts; pulse 1167 (lower)
+    # turned the camera to the rover's right, so +deg (right) needs pan-sign -1
+    ap.add_argument("--pan-id", type=int, default=1)
     ap.add_argument("--pan-center", type=float, default=1500.0, help="pulse (us) that points straight ahead")
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
-    # at the venue the pan turned left when commanded right (tilt fine): default -1; pass
-    # --pan-sign 1 if a re-mount fixes it
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
     _exit_on_sigterm()
@@ -652,6 +652,10 @@ def main():
         probe()
         return
     pan = None
+    if a.pan_call == "auto":
+        a.pan_call = "HiwonderSDK.Board:setPWMServoPulse" if a.hw == "hiwonder" else ""
+    if a.pan_call == "none":
+        a.pan_call = ""
     if a.pan_call:
         pan = PulseServo(PulseServo.resolve(a.pan_call), a.pan_id, a.pan_center,
                          a.pan_us_per_deg, a.pan_sign)

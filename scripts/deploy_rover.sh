@@ -7,7 +7,7 @@
 #   scripts/deploy_rover.sh selftest [ARGS] guarded chassis/pan moves (interactive, needs a TTY)
 #   scripts/deploy_rover.sh start URL [ARGS] run the client in the background, e.g.
 #        scripts/deploy_rover.sh start ws://169.254.50.2:8000
-#        scripts/deploy_rover.sh start ws://169.254.50.2:8000 --pan-call MODULE:FUNC --pan-id 2
+#        (pan defaults: servo 1, sign -1, HiwonderSDK.Board:setPWMServoPulse; --pan-call none = body only)
 #   scripts/deploy_rover.sh stop            stop the client (SIGTERM; the client stops the wheels)
 #   scripts/deploy_rover.sh status | log
 #
@@ -79,7 +79,7 @@ case "${1:-deploy}" in
 
 next:
   scripts/deploy_rover.sh probe
-  scripts/deploy_rover.sh selftest            # add --pan-call MODULE:FUNC --pan-id N once known
+  scripts/deploy_rover.sh selftest            # pan: servo 1 by default (--pan-call none to skip)
   scripts/deploy_rover.sh start ws://169.254.50.2:8000
 EOF
     ;;
