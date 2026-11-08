@@ -95,8 +95,11 @@ LOST_TO_SEARCH_S = 3.0    # lost target this long while approaching -> search ag
 LOCK_GATE = 0.4           # max box-centre jump (fraction of frame) that still counts as the lock
                           # (0.25 dropped good locks while the rover turned; one green ball in the demo)
 APPROACH_TURN_GAIN = 0.5  # turns ~3x faster than first assumed: was 1.2 and overshot
-APPROACH_MAX_TURN = 0.25
-APPROACH_ALIGN_ERR = 0.25  # turn in place until the target is within this of centre
+APPROACH_MAX_TURN = 0.2
+APPROACH_MIN_TURN = 0.12  # below this the motors don't move the body (trace: 0.145 turns it)
+APPROACH_TURN_DEADBAND = 0.05
+TURN_FRESH_S = 0.25       # only turn on a sighting this recent; blurred frames pause the turn
+APPROACH_ALIGN_ERR = 0.15  # turn in place until the target is within this of centre
 APPROACH_SPEED = 0.6       # fraction of DRIVE_SPEED while approaching
 HOLD_DEADBAND = 0.08      # while arrived, turn to re-centre when the ball is off-centre by more
 REAPPROACH_FRAC = 0.7     # while arrived, drive after the ball when its box shrinks below this
@@ -315,6 +318,15 @@ class Rover:
             step = _clamp(PAN_GAIN * err_deg, -PAN_MAX_STEP_DEG, PAN_MAX_STEP_DEG)
             self._set_pan(self.pan_deg + step)
 
+    @staticmethod
+    def _body_turn(b: float) -> float:
+        """Bounded body turn for bearing b (fraction of FOV): zero inside the deadband, otherwise
+        at least the turn that actually moves the chassis and at most APPROACH_MAX_TURN."""
+        if abs(b) <= APPROACH_TURN_DEADBAND:
+            return 0.0
+        mag = _clamp(APPROACH_TURN_GAIN * abs(b), APPROACH_MIN_TURN, APPROACH_MAX_TURN)
+        return mag if b > 0 else -mag
+
     def _bearing(self, ex: float) -> float:
         """Target direction relative to the body, as a fraction of the camera's field of view
         (equals the image error when the camera faces straight ahead)."""
@@ -440,7 +452,7 @@ class Rover:
         self.last_tick = now
         guide = self._guide(now)
         fresh = guide is not None
-        if fresh and self.state in ("driving", "searching", "approaching", "arrived"):
+        if fresh and self.state == "arrived":   # camera leads only for small moves at the ball
             ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
             self._track_pan(guide["err"][0], ts)
         if self.state == "turning":
@@ -476,7 +488,12 @@ class Rover:
                 self.hw.stop()
                 self.set("arrived")
                 return
-            turn = _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN)
+            if self.pan_deg != 0.0:
+                # one steerer at a time: centre the camera (the lock window follows) and let the
+                # body turn by the full bearing; pan + body together overshot and oscillated
+                self._set_pan(0.0)
+            ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
+            turn = self._body_turn(b) if now - ts <= TURN_FRESH_S else 0.0
             forward = 0.0 if abs(b) > APPROACH_ALIGN_ERR else DRIVE_SPEED * APPROACH_SPEED
             self.hw.drive(forward, turn)
         elif self.state == "arrived":  # keep following the ball if it moves
@@ -494,7 +511,8 @@ class Rover:
             if guide.get("size", 1.0) < ARRIVE_BOX_H * REAPPROACH_FRAC:
                 self.set("approaching")  # ball moved away: drive after it
             elif abs(b) > hold:
-                self.hw.drive(0.0, _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN))
+                ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
+                self.hw.drive(0.0, self._body_turn(b) if now - ts <= TURN_FRESH_S else 0.0)
             else:
                 self.hw.stop()  # close and within the hold band: hold
 

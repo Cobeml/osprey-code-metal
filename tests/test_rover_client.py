@@ -258,21 +258,32 @@ def test_pan_search_sweeps_camera_before_spinning_body(monkeypatch):
     assert (0.0, sc.SEARCH_TURN) in [c for _, c in seen]        # then a body spin step
 
 
-def test_pan_leads_and_body_turns_toward_pan_angle(monkeypatch):
+def test_approach_centres_camera_and_body_turns_by_full_bearing(monkeypatch):
+    """One steerer at a time: approaching re-centres the pan and the body turns toward the
+    bearing the pan was holding (pan + body together overshot on the venue rover)."""
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(20.0)                         # search sweep found it with the camera 20 deg right
+    r.on_local([box(0.5, 0.5, 0.1)])         # centred in the image -> bearing +20 deg
+    r.tick()
+    assert r.state == "approaching"
+    r.tick()
+    assert r.pan_deg == 0.0                  # camera back to straight ahead
+    turn = hw.cmds[-1][1]
+    assert sc.APPROACH_MIN_TURN <= turn <= sc.APPROACH_MAX_TURN   # body turns right, bounded
+
+
+def test_no_turn_on_a_stale_sighting(monkeypatch):
     t = [1000.0]
     r, hw = _pan_rover(monkeypatch, t)
     r._set_pan(0.0)
-    r.on_local([box(0.75, 0.5, 0.1)])  # target right of centre
+    r.on_local([box(0.8, 0.5, 0.1)])
     r.tick()
-    assert r.state == "approaching" and r.pan_deg > 0  # camera turned right toward it
     r.tick()
-    turn = hw.cmds[-1][1]
-    assert turn > 0  # body turns right too
-    # camera now centred on the target at +pan: body still steers toward the pan angle
-    t[0] += 0.1
-    r.on_local([box(0.5, 0.5, 0.1)])
+    assert hw.cmds[-1][1] > 0                # fresh: turns toward it
+    t[0] += sc.TURN_FRESH_S + 0.05           # blurred frames: no new sighting
     r.tick()
-    assert abs(r._bearing(0.0) - r.pan_deg / sc.CAM_HFOV_DEG) < 1e-9 and hw.cmds[-1][1] > 0
+    assert hw.cmds[-1][1] == 0.0             # holds the turn instead of turning blind
 
 
 def test_pan_corrects_once_per_sighting(monkeypatch):
