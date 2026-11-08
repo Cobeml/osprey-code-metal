@@ -49,6 +49,8 @@ class Settings:
     target_label: str = "green ball (stand-in for the person in the water)"
     green_hsv_lo: tuple = (35, 80, 50)
     green_hsv_hi: tuple = (85, 255, 255)
+    # red decoy ball: red wraps around hue 0 in OpenCV HSV, so two (lo, hi) bands
+    red_hsv_bands: tuple = (((0, 120, 70), (10, 255, 255)), ((170, 120, 70), (179, 255, 255)))
     capture_device: str = "auto"   # drone video on the Pi: auto = first uvcvideo device
     capture_file: str = ""         # recorded flight to replay (goggles DVR .avi)
     capture_fps: float = 12.0

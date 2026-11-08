@@ -28,14 +28,15 @@ from .nodes.capture import CaptureNode, list_uvc
 from .nodes.sim import SimScout, SimShipCam
 from .nodes.ws_ingest import ScoutIngest
 from .perception.detector import make_detector
-from .perception.targets import detect_targets
+from .perception.targets import detect_targets, is_target
 from .scenario import Scenario
 from .shipcam import RailTrigger
 from .store import EventStore
 
 log = logging.getLogger("osprey")
 import faulthandler, signal, sys  # noqa: E401,E402
-faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
+if hasattr(signal, "SIGUSR1"):  # POSIX only; lets the app also run on a Windows dev machine
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
 
 EVIDENCE_MIN_PERIOD_S = 0.5
 
@@ -150,7 +151,8 @@ class Ground:
     def detect(self, node_id: str, bgr) -> list[dict]:
         """Run this node's target detectors on a BGR frame (any thread)."""
         return detect_targets(self.targets.get(node_id, "person"), bgr, self.detector,
-                              (self.s.green_hsv_lo, self.s.green_hsv_hi))
+                              (self.s.green_hsv_lo, self.s.green_hsv_hi),
+                              tuple((tuple(lo), tuple(hi)) for lo, hi in self.s.red_hsv_bands))
 
     # -------------------------------------------------------------- frames
     def ingest_frame(self, node_id: str, jpeg: bytes, session_id: str, seq: int,
@@ -166,10 +168,12 @@ class Ground:
 
         events: list[dict] = []
         image_ref = None
+        # red decoys and colour-unknown balls are shown but never reach the incident engine
+        tdets = dets if node_id == "ship" else [d for d in dets if is_target(d)]
         if node_id == "ship":
             self.last_ship_dets = dets
             persons = [d for d in dets if d.get("cls", "person") == "person"]
-            balls = [d for d in dets if d.get("cls") in ("ball", "green") and d.get("z_m")]
+            balls = [d for d in dets if d.get("cls") == "green" and d.get("z_m")]
             if balls:
                 b = max(balls, key=lambda d: d["confidence"])
                 self.ship_ball = {"x_m": b.get("x_m", 0.0), "z_m": b["z_m"], "ts": capture_ts,
@@ -194,7 +198,7 @@ class Ground:
             elif trig:
                 self.trigger.fired = True
         else:
-            if dets and self.engine.active and \
+            if tdets and self.engine.active and \
                     now - self.last_evidence.get(node_id, 0) >= EVIDENCE_MIN_PERIOD_S:
                 image_ref = self.save_evidence(node_id, f"{node_id}-{session_id}-{seq}.jpg", jpeg)
                 self.last_evidence[node_id] = now
@@ -209,7 +213,7 @@ class Ground:
             detections=[Detection(track_id=d["track_id"], bbox=tuple(d["bbox"]),
                                   confidence=d["confidence"],
                                   location=Location(**d["location"]) if d.get("location") else None)
-                        for d in dets],
+                        for d in tdets],
             image_ref=image_ref,
         )
         events += self.engine.ingest(report)
@@ -220,7 +224,10 @@ class Ground:
         for d in dets:
             cid = f"{node_id}:{session_id}:{d['track_id']}"
             if node_id == "ship":
-                st = "person" if d.get("cls", "person") == "person" else "ball"
+                st = "person" if d.get("cls", "person") == "person" else \
+                    "decoy" if d.get("cls") == "red" else "ball"
+            elif not is_target(d):
+                st = "decoy" if d.get("cls") == "red" else "ball?"
             elif node.target_track == d["track_id"] and not node.lost and node.has_target:
                 st = "tracking"
             elif cid in node.candidates:
@@ -370,10 +377,13 @@ class Ground:
         self.scouts.send(self.rover, {"type": "handoff", **h})
         self.record([self.engine._ev("handoff", now, self.rover, **h)])  # noqa: SLF001
 
-    def rover_report(self, state: str) -> None:
+    def rover_report(self, state: str, onboard: Optional[dict] = None) -> None:
+        """onboard: the rover's own colour check, e.g. {"color": "green", "confidence": 0.9}."""
         if self.dispatch_state is not None:
             self.dispatch_state["status"] = state
             self.dispatch_state["status_ts"] = self.clock.now()
+            if onboard is not None:
+                self.dispatch_state["onboard"] = onboard
 
     def forcing_bearing(self) -> float:
         wu, wv, cu, cv = self.forcing.at(0)
