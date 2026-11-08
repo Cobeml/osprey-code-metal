@@ -27,6 +27,9 @@ SSH=(ssh -o ConnectTimeout=5 "$HOST")
 copy() {
   "${SSH[@]}" "mkdir -p ~/$DIR"
   scp -q turbopi/scout_client.py src/osprey/perception/ballcolor.py "$HOST:$DIR/"
+  # Pi 5 / ROS 2 image: HiwonderSDK shim over ~/board_demo/ros_robot_controller_sdk.py
+  "${SSH[@]}" "mkdir -p ~/$DIR/HiwonderSDK"
+  scp -q turbopi/HiwonderSDK/*.py "$HOST:$DIR/HiwonderSDK/"
   echo "copied scout_client.py + ballcolor.py to $HOST:~/$DIR"
 }
 
