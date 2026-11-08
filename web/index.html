@@ -82,6 +82,14 @@
     </div>
   </div>
   <div class="group">
+    <label>Deck rail (stand on the tape, then set)</label>
+    <button data-cmd="set_rail" data-args='{"from_person":true}'>Set rail = person's depth</button>
+    <div class="seg">
+      <button data-cmd="set_trigger" data-args='{"enabled":true}'>auto-MOB on</button>
+      <button data-cmd="set_trigger" data-args='{"enabled":false}'>auto-MOB off</button>
+    </div>
+  </div>
+  <div class="group">
     <label>Drift clock</label>
     <div class="seg">
       <button data-cmd="demo_speed" data-args='{"multiplier":60}'>60×</button>
