@@ -126,7 +126,8 @@ PAN_DEADBAND_DEG = 2.0
 PAN_SWEEP_DEG = 70.0      # search sweep half-width
 PAN_SWEEP_DEG_PER_S = 60.0
 SEARCH_SPIN_S = 0.35      # after a full sweep with nothing seen, spin the body this long (~50 deg)
-ARRIVED_BODY_DEG = 20.0   # while arrived, the body re-turns once the pan is past this
+ARRIVED_BODY_DEG = 20.0   # (unused since the body alone steers at the ball)
+ARRIVED_HOLD_ERR = 0.1    # at the ball: hold still while it is within this of centre
 
 
 class NoHardware:
@@ -520,8 +521,6 @@ class Rover:
         if fresh and self.state in ("approaching", "arrived"):
             ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
             self._track_tilt(guide["err"][1] + 0.5, ts)
-            if self.state == "arrived":   # camera pan leads only for small moves at the ball
-                self._track_pan(guide["err"][0], ts)
         if self.state == "turning":
             if now < self.until:
                 self.hw.drive(0.0, 0.5 * self.turn_dir)
@@ -578,9 +577,9 @@ class Rover:
                     self.set("searching")  # ball left the frame: look for it again
                 return
             b = self._bearing(guide["err"][0])
-            # with a pan camera small moves are followed by the pan alone; the body re-turns
-            # only once the target is well off the body's axis
-            hold = ARRIVED_BODY_DEG / CAM_HFOV_DEG if self.hw.has_pan else HOLD_DEADBAND
+            if self.pan_deg != 0.0:
+                self._set_pan(0.0)   # one steerer at the ball too: pan + body together oscillated
+            hold = ARRIVED_HOLD_ERR
             if guide.get("size", 1.0) < ARRIVE_BOX_H * REAPPROACH_FRAC:
                 self.set("approaching")  # ball moved away: drive after it
             elif abs(b) > hold:

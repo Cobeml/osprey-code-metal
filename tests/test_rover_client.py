@@ -297,7 +297,8 @@ def test_pan_corrects_once_per_sighting(monkeypatch):
     assert r.pan_deg == p1
 
 
-def test_arrived_with_pan_follows_small_moves_with_camera_only(monkeypatch):
+def test_at_the_ball_camera_stays_centred_and_body_turns(monkeypatch):
+    """One steerer at the ball too: pan + body together oscillated on the venue rover."""
     monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
     t = [1000.0]
     r, hw = _pan_rover(monkeypatch, t)
@@ -307,14 +308,13 @@ def test_arrived_with_pan_follows_small_moves_with_camera_only(monkeypatch):
     r.tick()
     assert r.state == "arrived"
     t[0] += 0.1
-    r.on_local([box(0.56, 0.5, 0.5)])  # small move right
+    r.on_local([box(0.56, 0.5, 0.5)])        # small move right: inside the hold band
     r.tick()
-    assert r.pan_deg > 0 and hw.cmds[-1] == "stop"  # camera follows, body holds
-    r._set_pan(30.0)                                 # far off the body axis now
+    assert r.pan_deg == 0.0 and hw.cmds[-1] == "stop"
     t[0] += 0.1
-    r.on_local([box(0.5, 0.5, 0.5)])
+    r.on_local([box(0.7, 0.5, 0.5)])         # well off-centre: the body turns, camera stays put
     r.tick()
-    assert hw.cmds[-1][0] == 0.0 and hw.cmds[-1][1] > 0  # body re-turns toward it
+    assert r.pan_deg == 0.0 and hw.cmds[-1][0] == 0.0 and hw.cmds[-1][1] > 0
 
 
 def test_pulse_servo_mapping_and_limits():
