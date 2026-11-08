@@ -144,6 +144,14 @@ SDK_FORWARD_DEG = 90.0
 SDK_BACKWARD_DEG = 270.0
 
 
+TRACE = os.environ.get("ROVER_TRACE") == "1"   # one log line per tick + lock decisions
+
+
+def _trace(msg: str) -> None:
+    if TRACE:
+        print(f"{time.time():.2f} {msg}", flush=True)
+
+
 def _clamp(v: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
 
@@ -341,9 +349,11 @@ class Rover:
         (within LOCK_GATE) counts, so another green blob cannot steal the target."""
         self.decoys = decoys
         if targets is None:
+            _trace("det none")
             return
         cands = [targets] if isinstance(targets, dict) else list(targets)
         if not cands:
+            _trace("det none")
             return
         now = time.time()
         if self.locked(now):
@@ -355,6 +365,8 @@ class Rover:
 
             best = min(cands, key=dist)
             if dist(best) > LOCK_GATE:
+                _trace(f"det rejected: {len(cands)} green, nearest {dist(best):.2f} from lock "
+                       f"({lx:.2f},{ly:.2f}) > gate {LOCK_GATE}")
                 return  # not our target: the lock goes stale unless it comes back
         else:
             best = max(cands, key=lambda d: d["confidence"])
@@ -415,6 +427,14 @@ class Rover:
 
     # ----------------------------------------------------------- control
     def tick(self) -> None:
+        self._tick()
+        if TRACE:
+            g = self.local if self.guide_src == "onboard" else self.follow if self.guide_src else None
+            _trace(f"tick {self.state} src={self.guide_src} "
+                   f"err={None if not g else round(g['err'][0], 2)} size={None if not g else round(g.get('size', 0), 2)} "
+                   f"pan={self.pan_deg:.1f} cmd={getattr(self.hw, 'last', None)}")
+
+    def _tick(self) -> None:
         now = time.time()
         dt = 0.1 if self.last_tick is None else _clamp(now - self.last_tick, 0.0, 0.2)
         self.last_tick = now
@@ -684,9 +704,14 @@ def main():
     ap.add_argument("--pan-center", type=float, default=1500.0, help="pulse (us) that points straight ahead")
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
     ap.add_argument("--tilt-id", type=int, default=2, help="tilt servo (venue TurboPi: 2)")
-    ap.add_argument("--tilt-us", type=float, default=1500.0, help="tilt pulse set at start; 0 = leave it")
+    # venue TurboPi: lower pulse = camera up; 1400-1800 all point at the floor, 900 is about level,
+    # 1000 keeps the room and the floor near the rover in view
+    ap.add_argument("--tilt-us", type=float, default=1000.0, help="tilt pulse set at start; 0 = leave it")
+    ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
+    global TRACE
+    TRACE = TRACE or a.trace
     _exit_on_sigterm()
     if a.probe:
         probe()
