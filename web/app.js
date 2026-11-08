@@ -374,6 +374,12 @@ function renderFeeds() {
       ctx.drawImage(f.live, fit.x, fit.y, fit.w, fit.h);
       drawBoxes(ctx, fit, f.liveHeader, false);
       if (node === "ship" && snap && snap.rail && snap.rail.row && f.liveHeader.source !== "sim") drawRail(ctx, fit);
+      if (node === "ship" && snap && snap.rail && f.liveHeader.source !== "sim") {
+        const txt = snap.rail.trigger_enabled ? `rail ${snap.rail.rail_m.toFixed(2)} m · auto-MOB ${snap.rail.armed ? "ARMED" : "on"}` : "auto-MOB off · rail not calibrated";
+        ctx.font = "bold 16px sans-serif"; const w = ctx.measureText(txt).width + 14;
+        ctx.fillStyle = "rgba(0,0,0,.65)"; ctx.fillRect(cv.width - w - 8, cv.height - 30, w, 24);
+        ctx.fillStyle = snap.rail.trigger_enabled ? "#f2cc60" : "#c9d1d9"; ctx.fillText(txt, cv.width - w - 1, cv.height - 12);
+      }
       if (ns && ns.lost && ns.last_accepted) {
         ageText = `visual lost · last seen ${fmtAge(t - ns.last_accepted.capture_ts)} ago`;
         if (f.grab) drawInset(ctx, cv, f.grab, f.grabHeader);
@@ -424,7 +430,9 @@ function subtitle() {
   const t = nowS(), inc = snap.incident, p = snap.phase;
   const tracking = ["A", "B"].filter((n) => snap.nodes[n] && snap.nodes[n].has_target && !snap.nodes[n].lost);
   switch (p) {
-    case "STANDBY": return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
+    case "STANDBY":
+      if (!snap.rail.trigger_enabled) return "Deck camera live with person detection. Rail not calibrated — auto-MOB off (manual MOB in the demo drawer).";
+      return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
     case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + " Drone and rover launched — drone searching the drift area.";
     case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` : "Candidate needs a decision."; }
     case "TRACKING": {

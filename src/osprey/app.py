@@ -82,7 +82,13 @@ class Ground:
         self.capture = CaptureNode(self, self.drone, settings.capture_device,
                                    settings.capture_file, settings.capture_fps)
         self.last_ship_dets: list[dict] = []
+        if self.sources["ship"] == "auto":
+            self.sources["ship"] = ("aurora" if self.aurora.available and self.aurora.camera_present()
+                                    else "sim")
         self.calib_path = rt / "calibration.json"
+        # Auto-MOB from the real camera stays off until the rail has been calibrated, so a
+        # person walking around an unmounted camera can't open an incident. Sim always triggers.
+        self.trigger_enabled = self.calib_path.exists()
         if self.calib_path.exists():
             c = json.loads(self.calib_path.read_text())
             self.trigger.rail_m = self.s.rail_m = float(c.get("rail_m", self.s.rail_m))
@@ -168,8 +174,10 @@ class Ground:
                 b = max(balls, key=lambda d: d["confidence"])
                 self.ship_ball = {"x_m": b.get("x_m", 0.0), "z_m": b["z_m"], "ts": capture_ts,
                                   "source": source}
-            trig = self.trigger.update(capture_ts, [(d["track_id"], d.get("z_m"), d.get("x_m", 0.0))
-                                                   for d in persons])
+            trig = None
+            if source == "sim" or self.trigger_enabled:
+                trig = self.trigger.update(capture_ts, [(d["track_id"], d.get("z_m"), d.get("x_m", 0.0))
+                                                       for d in persons])
             if trig and self.engine.armed:
                 p = self.ship.camera_point(trig["x_m"] or 0.0, trig["z_m"] or self.s.rail_m)
                 prov = "real_relative" if source == "aurora" else "simulated"
@@ -299,6 +307,8 @@ class Ground:
         snap["ship"] = {"lat": self.ship.lat, "lon": self.ship.lon, "heading": self.ship.heading_deg,
                         "label": "simulated ship position"}
         snap["rail"] = {"rail_m": self.trigger.rail_m, "armed": self.trigger.armed,
+                        "trigger_enabled": self.trigger_enabled or self.sources.get("ship") == "sim",
+                        "calibrated": self.calib_path.exists(),
                         "row": self.s.rail_row_frac or None,
                         "persons": [{"track_id": d["track_id"], "z_m": d.get("z_m")}
                                     for d in self.last_ship_dets]}
@@ -425,9 +435,23 @@ class Ground:
             self.scenario.hidden = False
             return {"command_id": cmd.command_id, "ok": True,
                     "message": f"person reappears {a.get('dist_m', 30)} m downstream"}
+        if t == "set_trigger":
+            self.trigger_enabled = bool(a.get("enabled", True))
+            self.trigger.reset()
+            return {"command_id": cmd.command_id, "ok": True,
+                    "message": "auto-MOB " + ("on" if self.trigger_enabled else "off")}
         if t == "set_rail":
+            if a.get("from_person"):
+                ps = [d for d in self.last_ship_dets
+                      if d.get("cls", "person") == "person" and d.get("z_m")]
+                if not ps:
+                    return {"command_id": cmd.command_id, "ok": False,
+                            "message": "no person with valid depth in view"}
+                a = {**a, "rail_m": round(max(ps, key=lambda d: d["confidence"])["z_m"], 2)}
             if "rail_m" in a:
                 self.trigger.rail_m = self.s.rail_m = float(a["rail_m"])
+                self.trigger_enabled = True
+                self.trigger.reset()
             if "rail_row_frac" in a:
                 self.s.rail_row_frac = float(a["rail_row_frac"])
             self.calib_path.write_text(json.dumps({"rail_m": self.s.rail_m,

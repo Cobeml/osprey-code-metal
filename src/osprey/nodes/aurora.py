@@ -39,6 +39,18 @@ class AuroraNode:
     def available(self) -> bool:
         return Path(BRIDGE).exists()
 
+    @staticmethod
+    def camera_present() -> bool:
+        """Aurora 930 (USB 3251:1930) enumerated on this machine."""
+        for d in Path("/sys/bus/usb/devices").glob("*"):
+            try:
+                if (d / "idVendor").read_text().strip() == "3251" and \
+                        (d / "idProduct").read_text().strip() == "1930":
+                    return True
+            except OSError:
+                continue
+        return False
+
     async def run(self) -> None:
         while True:
             if self.g.sources.get("ship") != "aurora" or not self.available:

@@ -18,7 +18,7 @@ class Settings:
     ship_heading_deg: float = 45.0
     cam_bearing_rel: float = 90.0  # deck camera looks out to starboard
     # node sources: ship: sim|aurora ; A/B: sim|ws
-    source_ship: str = "sim"
+    source_ship: str = "auto"  # auto = Aurora when the bridge is built and the camera is on USB
     source_A: str = "sim"
     source_B: str = "sim"
     # ship-cam rail trigger

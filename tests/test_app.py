@@ -124,3 +124,20 @@ def test_rover_launches_on_mob_and_gets_fix_on_confirm(client):
     assert h["from_node"] == "A" and h["range_m"] == pytest.approx(30.0, abs=0.5)
     cmd(client, "end_incident")
     assert g.dispatch_state is None
+
+
+def test_real_ship_trigger_off_until_calibrated(client):
+    g = client.ground
+    cmd(client, "end_incident")
+    g.trigger_enabled = False
+    g.trigger.reset()
+    t0 = time.time()
+    for i, z in enumerate([1.0, 1.2, 1.8, 1.8, 1.8, 1.8]):
+        g.ingest_frame("ship", b"\xff\xd8\xff\xd9", "aur-1", 1000 + i, t0 + i * 0.07, t0 + i * 0.07,
+                       "synced", [{"track_id": 1, "bbox": (0.4, 0.2, 0.6, 0.9), "confidence": 0.9,
+                                   "cls": "person", "z_m": z, "x_m": 0.0}], source="aurora")
+    assert g.engine.phase() != "OVERBOARD" or g.engine.incident.source != "shipcam"
+    g.last_ship_dets = [{"track_id": 1, "bbox": (0.4, 0.2, 0.6, 0.9), "confidence": 0.9,
+                         "cls": "person", "z_m": 1.63}]
+    a = cmd(client, "set_rail", from_person=True)
+    assert a["ok"] and "1.63" in a["message"] and g.trigger_enabled
