@@ -347,3 +347,13 @@ def test_selftest_always_ends_stopped(monkeypatch):
     monkeypatch.setattr(sc.time, "sleep", lambda s: None)
     sc.selftest(hw)
     assert ch.calls[0][0] > 0 and ch.calls[-1] == (0, 0, 0)
+
+
+def test_selftest_skip_sends_no_wheel_command(monkeypatch):
+    ch = FakeChassis()
+    hw = sc.HiwonderHardware(chassis=ch)
+    answers = iter(["s", "s", "s", "s"])
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    monkeypatch.setattr(sc.time, "sleep", lambda s: None)
+    sc.selftest(hw)
+    assert all(c == (0, 0, 0) for c in ch.calls)   # only stops, never a move

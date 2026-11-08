@@ -480,8 +480,11 @@ def selftest(hw) -> None:
              ("spin clockwise (seen from above)", 0.0, 0.5), ("spin anticlockwise", 0.0, -0.5)]
     try:
         for name, f, t in moves:
-            if input(f"{name} for {SELFTEST_S:.0f} s? [Enter = go, s = skip, q = quit] ").strip().lower() == "q":
+            ans = input(f"{name} for {SELFTEST_S:.0f} s? [Enter = go, s = skip, q = quit] ").strip().lower()
+            if ans == "q":
                 break
+            if ans == "s":   # skip really skips: no wheel command at all
+                continue
             hw.drive(f, t)
             time.sleep(SELFTEST_S)
             hw.stop()
