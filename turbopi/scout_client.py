@@ -546,12 +546,18 @@ def probe() -> None:
           if os.path.isdir("/dev") else "?")
 
 
+ROTATE_CODES = {90: "ROTATE_90_CLOCKWISE", 180: "ROTATE_180", 270: "ROTATE_90_COUNTERCLOCKWISE"}
+
+
 async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
-              onboard: str = "green"):
+              onboard: str = "green", rotate: int = 0):
     import cv2
     import websockets
 
-    global ARRIVE_BOX_H
+    global ARRIVE_BOX_H, CAM_HFOV_DEG
+    rot = getattr(cv2, ROTATE_CODES[rotate]) if rotate in ROTATE_CODES else None
+    if rotate in (90, 270):  # portrait after rotation: across the image is the camera's vertical FOV
+        CAM_HFOV_DEG = CAM_HFOV_DEG * 0.75
     ARRIVE_BOX_H = ARRIVE_BY_TARGET.get(onboard, ARRIVE_BOX_H)
     person = PersonHOG() if onboard == "person" else None
     cap = cv2.VideoCapture(cam_index)
@@ -567,6 +573,8 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
 
     def grab():
         ok, frame = cap.read()
+        if ok and rot is not None:  # upright before the onboard lock and the ground both see it
+            frame = cv2.rotate(frame, rot)
         n[0] += 1
         if ok and person is not None and n[0] % 2 == 0:  # HOG every other frame (~5 Hz)
             rover.on_local(person.best(frame))
@@ -634,6 +642,9 @@ def main():
     ap.add_argument("url", nargs="?")
     ap.add_argument("--node", default="B")
     ap.add_argument("--camera", type=int, default=0)
+    # venue TurboPi: the camera is mounted turned 90 deg clockwise, so frames are turned back 270
+    ap.add_argument("--rotate", type=int, default=270, choices=[0, 90, 180, 270],
+                    help="clockwise degrees applied to every frame (270 = undo a 90 deg clockwise mount)")
     ap.add_argument("--hw", default="none", choices=["none", "hiwonder"])
     ap.add_argument("--onboard", default="green", choices=["person", "green", "none"])
     ap.add_argument("--selftest", action="store_true", help="guarded chassis/pan moves, no network")
@@ -668,7 +679,7 @@ def main():
     if not a.url:
         ap.error("url is required unless --selftest")
     try:
-        asyncio.run(run(a.url, a.camera, hw, a.node, onboard=a.onboard))
+        asyncio.run(run(a.url, a.camera, hw, a.node, onboard=a.onboard, rotate=a.rotate))
     finally:
         hw.stop()
 
