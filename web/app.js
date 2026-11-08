@@ -670,6 +670,10 @@ function renderBanner() {
   lk.textContent = linkUp ? "LINK OK" : "LINK LOST";
   lk.className = "pill " + (linkUp ? "ok" : "bad");
   if (!snap) return;
+  const wt = $("#water"), w = snap.overboard && snap.overboard.water;
+  wt.textContent = w === "wet" ? "WATER: WET" : w === "dry" ? "WATER: DRY" : "WATER: OFFLINE";
+  wt.className = "pill " + (w === "wet" ? "wet" : w === "dry" ? "dry" : "bad");
+  if (snap.overboard) wt.title = `Grove water sensor (Seeeduino ${snap.overboard.pin}) · ${snap.overboard.sensor_status}`;
   b.className = snap.phase;
   document.body.classList.remove("ph-STANDBY", "ph-OVERBOARD", "ph-CANDIDATE", "ph-TRACKING", "ph-CONTACT_LOST", "ph-ENDED");
   document.body.classList.add("ph-" + snap.phase);

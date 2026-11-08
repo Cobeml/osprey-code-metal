@@ -45,6 +45,8 @@ body { display: grid; grid-template-rows: auto auto 1fr auto; height: 100vh; ove
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
   font-size: 11.5px; font-weight: 700; letter-spacing: .03em; white-space: nowrap; background: #f2f4f7; color: #344054; }
 .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.pill.wet { background: var(--blue); color: #fff; }
+.pill.dry { background: var(--blue-bg); color: var(--blue); }
 .pill.ok, .pill.LIVE { background: var(--green-bg); color: var(--green); }
 .pill.TRACKING, .pill.ON_SCENE, .pill.ARRIVED { background: var(--green); color: #fff; }
 .pill.CANDIDATE { background: var(--red); color: #fff; animation: blink 1s infinite; }
