@@ -13,6 +13,8 @@
 #        the ground Pi) and ARGS (e.g. "--trace --fps 8") to rover.env; the client tries them in order
 #   scripts/deploy_rover.sh autostart on|off  run the client at boot as osprey-rover.service (on also
 #        disables Hiwonder's start_node container, which holds the motors and camera; off restores it)
+#   scripts/deploy_rover.sh uwb [ARGS]      run uwb_probe.py on the rover (UWB board on its USB), e.g.
+#        scripts/deploy_rover.sh uwb auto --send INITF
 #   scripts/deploy_rover.sh stop            stop the client (SIGTERM; the client stops the wheels)
 #   scripts/deploy_rover.sh status | log
 #
@@ -38,7 +40,7 @@ SSH=(ssh -o ConnectTimeout=5 "$HOST")
 
 copy() {
   "${SSH[@]}" "mkdir -p ~/$DIR"
-  scp -q turbopi/scout_client.py src/osprey/perception/ballcolor.py "$HOST:$DIR/"
+  scp -q turbopi/scout_client.py turbopi/uwb.py turbopi/uwb_probe.py src/osprey/perception/ballcolor.py "$HOST:$DIR/"
   # Pi 5 / ROS 2 image: HiwonderSDK shim over ~/board_demo/ros_robot_controller_sdk.py
   "${SSH[@]}" "mkdir -p ~/$DIR/HiwonderSDK"
   scp -q turbopi/HiwonderSDK/*.py "$HOST:$DIR/HiwonderSDK/"
@@ -96,6 +98,9 @@ next:
   scripts/deploy_rover.sh start ws://169.254.50.2:8000
 EOF
     ;;
+  uwb)
+    shift
+    "${SSH[@]}" "$REMOTE_PY; \$PY uwb_probe.py $*" ;;
   probe)
     "${SSH[@]}" "$REMOTE_PY; \$PY scout_client.py --probe" ;;
   selftest)

@@ -195,13 +195,13 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 Real MOB beacons are worn by the person, so: one board on the ball ("the person's beacon"), one on the rover (USB to the rover Pi). UWB two-way ranging gives distance only (~10 cm, tens of Hz, no angle: one antenna each). The rover's camera already gives the angle, so camera + range = a real 2D fix; range alone still helps when the ball is out of view.
 - [ ] Identify the firmware: plug a board into the Mac, read the banner on `/dev/cu.usbmodem*` at 115200. Qorvo's CLI firmware ranges with `INITF` (rover, initiator) / `RESPF` (ball, responder). If it ships with the Nearby Interaction demo instead, reflashing needs J-Link / nRF tools (ask before installing).
 - [ ] Ball side: board + small USB power bank, `RESPF` at power-up (saved config if the firmware allows, else a boot script on a tiny host).
-- [ ] Rover side: `turbopi/uwb.py` reads ranges from `/dev/ttyACM0` in a thread (newest value + timestamp, median of the last 5, stale after 0.5 s). Unit-test the parser against captured lines.
-- [ ] Use it in `scout_client.py` behind `--uwb` (off by default, today's behaviour unchanged):
+- [x] Rover side: `turbopi/uwb.py` reads ranges from `/dev/ttyACM*` in a thread (median of the last 5, stale after 0.6 s, raw termios, no pyserial). Parser takes Qorvo CLI JSON (`D_cm`) and key/value text; tested incl. a pseudo-terminal. `turbopi/uwb_probe.py` shows raw output + parsed ranges. Still to do: check the parser against the real board's lines.
+- [x] Use it in `scout_client.py` behind `--uwb` (off by default, today's behaviour unchanged). Unit-tested, not yet driven:
   - run-out distance = UWB range instead of the 1.5 m default;
   - arrival = range ≤ 0.4 m (with the box as a cross-check);
-  - lock check: a green blob whose box-size distance disagrees with UWB range by > 50 % is a decoy;
+  - (not done) lock check: a green blob whose box-size distance disagrees with UWB range by > 50 % is a decoy;
   - lost from view: drive short legs and keep the heading that makes the range shrink (gradient search), then camera sweep as now.
-- [ ] Report `uwb_range_m` with rover state; dashboard shows "UWB range 1.23 m · real (Qorvo DWM3001C)" on Rover B's tile and a range ring around the rover on the chart.
+- [x] Rover reports `uwb_m` every second; the Rover tile shows "UWB 1.23 m to beacon · MEASURED" (checked locally with a fake rover). Range ring on the chart not done: the rover's chart position is simulated.
 - [ ] Later: board with the phone operator for phone↔rover range (triangulation with the phone's bearing to the ball).
 
 ### Stretch (only after Phase 8 rehearses cleanly)

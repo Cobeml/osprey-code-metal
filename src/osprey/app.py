@@ -71,6 +71,7 @@ class Ground:
         self.sim_scouts = {"A": SimScout("A", self.labels["A"].split("·")[-1].strip(), 1),
                            "B": SimScout("B", self.labels["B"].split("·")[-1].strip(), 2)}
         self.dispatch_state: Optional[dict] = None  # rover dispatch: {ts, status, plan}
+        self.rover_onboard: Optional[dict] = None   # rover's latest own report (camera lock, UWB range)
         self.ship_ball: Optional[dict] = None       # ball fix on the deck camera (real relative)
         self.sim_ship_ball: Optional[dict] = None   # drawer SIM stand-in, rides on the ship frames
         self.last_evidence: dict[str, float] = {}
@@ -346,6 +347,7 @@ class Ground:
         snap["roles"] = {"drone": self.drone, "rover": self.rover}
         snap["target_label"] = self.s.target_label
         snap["dispatch"] = self.dispatch_state
+        snap["rover_onboard"] = self.rover_onboard
         snap["capture"] = {"status": self.capture.status, "device": self.capture.opened}
         return snap
 
@@ -398,6 +400,8 @@ class Ground:
 
     def rover_report(self, state: str, onboard: Optional[dict] = None) -> None:
         """onboard: the rover's own check, e.g. {"label": "person", "confidence": 0.9}."""
+        if onboard is not None:
+            self.rover_onboard = {**onboard, "state": state, "ts": self.clock.now()}
         if self.dispatch_state is not None:
             self.dispatch_state["status"] = state
             self.dispatch_state["status_ts"] = self.clock.now()

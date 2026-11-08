@@ -145,6 +145,14 @@ ARRIVED_HOLD_ERR = 0.1    # at the ball: hold still while it is within this of c
 # But a coordinator "stop" cannot reach it then: after this long without the ground it stops and
 # holds (--autonomy-s; 0 = stop at once, the old behaviour).
 LINK_AUTONOMY_S = 60.0
+# UWB range beacon (--uwb): one DWM3001CDK on the rover, one with the ball. Distance only, ~10 cm.
+UWB_ARRIVE_M = 0.5        # range that counts as at the ball (board offsets: calibrate with --uwb-offset)
+UWB_RUNOUT_EXTRA_M = 0.3  # with a range, run out this far past it before searching (not EXTRA_SEARCH_M)
+UWB_AWAY_M = 0.25         # range grew this much while running out: wrong way, search instead
+UWB_NEAR_M = 0.8          # closer than this and not in view: look around (sweep) rather than drive legs
+UWB_LEG_S = 1.5           # range-gradient search: drive this long blind, then compare ranges
+UWB_LEG_GAIN_M = 0.08     # a leg that shortened the range by this much was the right way
+UWB_MAX_GOOD_LEGS = 3     # after this many good legs in a row, sweep the camera again
 MOVING_STATES = ("turning", "driving", "searching", "approaching", "arrived")
 
 
@@ -342,6 +350,11 @@ class Rover:
         self.half_sweeps = 0
         self.spin_until = 0.0
         self.inplace_since = None  # when the current turn-in-place began (stall boost)
+        self.uwb = None            # UwbRanger (--uwb) or None
+        self.leg_until = 0.0       # range-gradient search leg in progress until
+        self.leg_r0 = None
+        self.good_legs = 0
+        self.runout_r0 = None      # range when the run-out started
         self.link_up = False
         self.link_lost_at = None   # when the ground link last dropped (None: never connected)
         self.last_tick = None
@@ -436,6 +449,8 @@ class Rover:
         if now < self.spin_until:
             self.hw.drive(0.0, SEARCH_SPIN_TURN)
             return
+        if self._uwb_leg(now):
+            return
         self.hw.stop()
         nxt = self.pan_deg + self.sweep_dir * PAN_SWEEP_DEG_PER_S * dt
         if abs(nxt) >= PAN_SWEEP_DEG:
@@ -445,8 +460,42 @@ class Rover:
             if self.half_sweeps >= 2:  # looked both ways: turn the body to a fresh sector
                 self.half_sweeps = 0
                 nxt = 0.0
-                self.spin_until = now + SEARCH_SPIN_S
+                r = self.uwb_m(now)
+                if r is not None and r > UWB_NEAR_M:
+                    self._start_leg(now, r)   # beacon says it is further off: try this way first
+                else:
+                    self.spin_until = now + SEARCH_SPIN_S
         self._set_pan(nxt)
+
+    def _start_leg(self, now: float, r: float) -> None:
+        self.leg_until, self.leg_r0 = now + UWB_LEG_S, r
+        self._set_pan(0.0)
+
+    def _uwb_leg(self, now: float) -> bool:
+        """Range-gradient search (ball out of view, beacon in range): drive a short leg straight,
+        keep going while the range shrinks, turn to a new sector when it does not. True while the
+        leg owns the wheels."""
+        if self.leg_r0 is None:
+            return False
+        if now < self.leg_until:
+            self.hw.drive(DRIVE_SPEED * APPROACH_SPEED, 0.0)   # camera ahead: sighting -> approach
+            return True
+        r = self.uwb_m(now)
+        r0, self.leg_r0 = self.leg_r0, None
+        self.hw.stop()
+        if r is not None and r0 - r >= UWB_LEG_GAIN_M and r > UWB_NEAR_M \
+                and self.good_legs + 1 < UWB_MAX_GOOD_LEGS:
+            self.good_legs += 1
+            self._start_leg(now, r)                 # closing in: same way again
+            _trace(f"uwb leg good {r0:.2f} -> {r:.2f} m")
+            return True
+        if r is None or r0 - r < UWB_LEG_GAIN_M:    # not closer: this way is wrong, turn
+            self.good_legs = 0
+            self.spin_until = now + SEARCH_SPIN_S
+            _trace(f"uwb leg bad {r0:.2f} -> {r if r is None else round(r, 2)} m: turn")
+            return True
+        self.good_legs = 0                          # close now, or enough legs: look around
+        return False
 
     # ----------------------------------------------------------- recognition
     def locked(self, now: float = None) -> bool:
@@ -486,11 +535,18 @@ class Rover:
         self.local = {"err": [cx - 0.5, cy - 0.5], "size": y2 - y1, "confidence": best["confidence"]}
         self.local_ts = now
 
+    def uwb_m(self, now: float = None):
+        """Fresh UWB range to the ball's beacon in metres, or None (no --uwb, stale, unplugged)."""
+        return None if self.uwb is None else self.uwb.range_m(now)
+
     def onboard(self) -> dict:
         """What the rover's own camera says, reported with every state change."""
         fresh = self.local is not None and time.time() - self.local_ts <= STALE_S
         label = getattr(self, "onboard_label", "green")
-        return {"label": label if fresh else None, "color": "green" if fresh and label == "green" else None,
+        r = self.uwb_m()
+        uwb_info = {} if self.uwb is None else {
+            "uwb_m": None if r is None else round(r, 2), "uwb_status": self.uwb.status}
+        return {**uwb_info, "label": label if fresh else None, "color": "green" if fresh and label == "green" else None,
                 "confidence": round(self.local["confidence"], 2) if fresh else None,
                 "decoys": self.decoys, "guide": self.guide_src, "locked": fresh,
                 "pan_deg": round(self.pan_deg, 1) if self.hw.has_pan else None,
@@ -511,6 +567,7 @@ class Rover:
     def set(self, state: str) -> None:
         if state != self.state:
             self.inplace_since = None
+            self.leg_r0 = None
             if state == "searching" and self.tilt_us is not None:
                 self._set_tilt(self.hw.tilt_base_us)   # search at the start tilt, not at the floor
                 self.last_cy = 0.5
@@ -521,6 +578,7 @@ class Rover:
         self.plan = plan
         self.lock_centre = None  # a new dispatch starts a fresh search
         self.half_sweeps, self.spin_until = 0, 0.0
+        self.leg_until, self.leg_r0, self.good_legs = 0.0, None, 0
         self._set_pan(0.0)
         if self.tilt_us is not None:
             self._set_tilt(self.hw.tilt_base_us)   # start each run at the level-ish start tilt
@@ -582,12 +640,23 @@ class Rover:
             if now < self.until:
                 self.hw.drive(0.0, 0.5 * self.turn_dir)
             else:
-                dist = self.plan.get("distance_m", 1.5) + EXTRA_SEARCH_M
+                r = self.uwb_m(now)
+                if r is not None:      # real distance to the beacon instead of the planned guess
+                    dist = r + UWB_RUNOUT_EXTRA_M
+                    self.runout_r0 = r
+                else:
+                    dist = self.plan.get("distance_m", 1.5) + EXTRA_SEARCH_M
+                    self.runout_r0 = None
                 self.until = now + dist / DRIVE_M_PER_S
                 self.set("driving")
         elif self.state == "driving":  # drive forward until the target is recognised
+            r = self.uwb_m(now)
             if fresh:
                 self.set("approaching")
+            elif r is not None and (r <= UWB_NEAR_M or (
+                    self.runout_r0 is not None and r - self.runout_r0 >= UWB_AWAY_M)):
+                self.hw.stop()         # beacon is close, or we are driving away from it: search
+                self.set("searching")
             elif now < self.until:
                 self.hw.drive(DRIVE_SPEED, 0.0)
             else:
@@ -608,7 +677,8 @@ class Rover:
                 return
             b = self._bearing(guide["err"][0])
             size = guide.get("size", 0.0)
-            if size >= ARRIVE_BOX_H:
+            r = self.uwb_m(now)
+            if size >= ARRIVE_BOX_H or (r is not None and r <= UWB_ARRIVE_M):
                 self.hw.stop()
                 self.set("arrived")
                 return
@@ -644,7 +714,9 @@ class Rover:
             if self.pan_deg != 0.0:
                 self._set_pan(0.0)   # one steerer at the ball too: pan + body together oscillated
             hold = ARRIVED_HOLD_ERR
-            if guide.get("size", 1.0) < ARRIVE_BOX_H * REAPPROACH_FRAC:
+            r = self.uwb_m(now)
+            if guide.get("size", 1.0) < ARRIVE_BOX_H * REAPPROACH_FRAC and \
+                    (r is None or r > UWB_ARRIVE_M + 0.15):
                 self.set("approaching")  # ball moved away: drive after it
             elif abs(b) > hold:
                 ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
@@ -752,7 +824,7 @@ VISION_PERIOD_S = 0.1     # onboard detection rate, independent of the video sen
 
 
 async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
-              onboard: str = "green", rotate: int = 0, jpeg_q: int = 70):
+              onboard: str = "green", rotate: int = 0, jpeg_q: int = 70, uwb=None):
     import cv2
     import websockets
 
@@ -783,6 +855,7 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
     rover = Rover(hw, lambda st: outbox.append({"type": "rover_state", "state": st,
                                                 "onboard": rover.onboard()}))
     rover.onboard_label = onboard
+    rover.uwb = uwb
     if onboard == "green" and ballcolor is None:
         print("onboard classifier unavailable (ballcolor.py not found): ground guidance only")
     n = [0]
@@ -815,8 +888,12 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
             await asyncio.sleep(max(0.0, VISION_PERIOD_S - (time.time() - t0)) if ok else 0.2)
 
     async def control():
+        last_uwb_report = 0.0
         while True:
             rover.tick()
+            if rover.uwb is not None and time.time() - last_uwb_report >= 1.0:
+                last_uwb_report = time.time()
+                rover.report(rover.state)   # live range for the dashboard (same state again)
             del outbox[:-20]   # link down: keep only the newest reports
             await asyncio.sleep(0.1)
 
@@ -920,6 +997,11 @@ def main():
     ap.add_argument("--autonomy-s", type=float, default=LINK_AUTONOMY_S,
                     help="keep searching/approaching this long after the ground link drops, then stop "
                          "(0 = stop at once)")
+    ap.add_argument("--uwb", default="", help="UWB range beacon port (/dev/ttyACM0, or auto); off by default")
+    ap.add_argument("--uwb-init", default="", help="command sent when the port opens, e.g. INITF (Qorvo CLI)")
+    ap.add_argument("--uwb-offset", type=float, default=0.0, help="metres subtracted from every range "
+                    "(board-to-ball and board-to-camera offsets)")
+    ap.add_argument("--uwb-arrive", type=float, default=UWB_ARRIVE_M, help="range that counts as arrived")
     ap.add_argument("--fps", type=float, default=10.0, help="video sent to the ground (Wi-Fi/tunnel: try 6-8)")
     ap.add_argument("--jpeg-q", type=int, default=70, help="JPEG quality of the video sent (tunnel: try 55)")
     ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
@@ -955,8 +1037,16 @@ def main():
     if not a.url:
         ap.error("url is required unless --selftest")
     try:
+        ranger = None
+        if a.uwb:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import uwb as uwb_mod
+            globals()["UWB_ARRIVE_M"] = a.uwb_arrive
+            ranger = uwb_mod.UwbRanger(a.uwb, init_cmd=a.uwb_init or None, offset_m=a.uwb_offset).start()
+            print(f"uwb: reading {a.uwb} (init {a.uwb_init or '-'}, offset {a.uwb_offset} m, "
+                  f"arrive at {a.uwb_arrive} m)", flush=True)
         asyncio.run(run(a.url, a.camera, hw, a.node, fps=a.fps, onboard=a.onboard, rotate=a.rotate,
-                        jpeg_q=a.jpeg_q))
+                        jpeg_q=a.jpeg_q, uwb=ranger))
     finally:
         hw.stop()
 

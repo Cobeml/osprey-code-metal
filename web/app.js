@@ -545,6 +545,15 @@ function renderFeeds() {
     let tg = vid.querySelector(".target");
     if (!tg) { tg = document.createElement("div"); tg.className = "target"; vid.appendChild(tg); }
     tg.textContent = ns && ns.target && node !== "ship" ? "target: " + (ns.target === "ball" ? "green ball" : ns.target.replace("+", " + ")) : "";
+    // UWB range beacon on the ball (real two-way ranging, distance only): rover tile only
+    let ub = vid.querySelector(".uwb");
+    if (!ub) { ub = document.createElement("div"); ub.className = "uwb"; vid.appendChild(ub); }
+    const ro = isRover && snap.rover_onboard, roAge = ro ? snap.server_ts - ro.ts : Infinity;
+    if (ro && "uwb_m" in ro && roAge < 3) {
+      ub.textContent = ro.uwb_m != null ? `UWB ${ro.uwb_m.toFixed(2)} m to beacon` : `UWB ${ro.uwb_status || "no range"}`;
+      ub.className = "uwb" + (ro.uwb_m != null ? " live" : "");
+      ub.title = "Ultra-wideband two-way ranging between the rover and the ball's beacon (Qorvo DWM3001C) - measured, distance only";
+    } else ub.textContent = "";
     const pe = tile.querySelector(".pill");
     pe.textContent = pill + pillNote + (linkUp || !snap ? "" : " · as of link loss");
     pe.className = "pill " + pill.replace(" ", "_");

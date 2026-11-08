@@ -595,3 +595,101 @@ def test_stop_wins_at_the_ball_too(monkeypatch):
     assert r.state == "arrived"
     r.on_command({"type": "stop"})
     assert r.state == "stopped" and hw.cmds[-1] == "stop"
+
+
+class FakeUwb:
+    def __init__(self, m=None):
+        self.m, self.status = m, "ranging"
+
+    def range_m(self, now=None):
+        return self.m
+
+
+def test_uwb_off_by_default_changes_nothing():
+    r = sc.Rover(HW(), lambda s: None)
+    assert r.uwb is None and r.uwb_m() is None and "uwb_m" not in r.onboard()
+
+
+def test_uwb_runout_uses_the_measured_range(monkeypatch):
+    t = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    hw = HW()
+    r = sc.Rover(hw, lambda s: None)
+    r.uwb = FakeUwb(2.0)
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 1.5})
+    r.tick()
+    assert r.state == "driving"
+    assert abs((r.until - t[0]) - (2.0 + sc.UWB_RUNOUT_EXTRA_M) / sc.DRIVE_M_PER_S) < 1e-6
+    assert r.onboard()["uwb_m"] == 2.0
+
+
+def test_uwb_runout_stops_when_driving_away_or_close(monkeypatch):
+    t = [1000.0]
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    r = sc.Rover(HW(), lambda s: None)
+    u = r.uwb = FakeUwb(2.0)
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 1.5})
+    r.tick()
+    t[0] += 1
+    u.m = 2.0 + sc.UWB_AWAY_M + 0.01           # range grows: wrong way
+    r.tick()
+    assert r.state == "searching"
+
+
+def test_uwb_arrives_by_range_even_when_the_box_looks_small(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.uwb = FakeUwb(1.0)
+    r._set_pan(0.0)
+    r.on_local([box(0.5, 0.5, 0.2)])
+    r.tick()
+    r.tick()
+    assert r.state == "approaching"
+    r.uwb.m = sc.UWB_ARRIVE_M - 0.05
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.5, 0.2)])
+    r.tick()
+    assert r.state == "arrived"
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.5, 0.2)])           # small box, but the beacon says we are there
+    r.tick()
+    assert r.state == "arrived"
+
+
+def _sweep_until_leg(r, hw, t, max_ticks=80):
+    for _ in range(max_ticks):
+        t[0] += 0.1
+        r.tick()
+        if r.leg_r0 is not None:
+            return True
+    return False
+
+
+def test_uwb_search_drives_legs_while_the_range_shrinks_then_turns_when_not(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    u = r.uwb = FakeUwb(3.0)
+    assert _sweep_until_leg(r, hw, t)          # full camera sweep, nothing seen: drive a leg
+    t[0] += 0.1
+    r.tick()
+    assert hw.cmds[-1][0] > 0 and hw.cmds[-1][1] == 0.0 and r.pan_deg == 0.0
+    t[0] += sc.UWB_LEG_S
+    u.m = 2.7                                  # closer: same way again
+    r.tick()
+    assert r.leg_r0 == 2.7 and r.good_legs == 1
+    t[0] += sc.UWB_LEG_S + 0.01
+    u.m = 2.75                                 # not closer: turn to a new sector
+    r.tick()
+    assert r.leg_r0 is None and r.spin_until > t[0]
+    t[0] += 0.1
+    r.tick()
+    assert hw.cmds[-1] == (0.0, sc.SEARCH_SPIN_TURN)
+
+
+def test_uwb_close_but_unseen_looks_around_instead_of_driving(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.uwb = FakeUwb(sc.UWB_NEAR_M - 0.1)
+    assert not _sweep_until_leg(r, hw, t)
+    assert all(c == "stop" or c[0] == 0.0 for c in hw.cmds[-60:])   # never drives blind

@@ -187,3 +187,9 @@ def test_drawer_sim_ship_ball_rides_on_ship_frames(client):
     st = client.get("/api/state").json()
     assert st["nodes"]["ship"]["has_target"]
     assert st["nodes"]["ship"]["last_accepted"]["location"]["provenance"] == "simulated"
+
+
+def test_rover_report_with_uwb_range_reaches_the_display_state(client):
+    client.ground.rover_report("idle", {"locked": False, "uwb_m": 1.37, "uwb_status": "ranging"})
+    ro = client.get("/api/state").json()["rover_onboard"]
+    assert ro["uwb_m"] == 1.37 and ro["state"] == "idle" and ro["ts"] > 0

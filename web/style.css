@@ -176,6 +176,11 @@ body.has-expanded #tile-backdrop { display: block; }
 .tile .target { position: absolute; right: 8px; bottom: 8px; font-size: 10.5px; font-weight: 600; color: #fff;
   background: rgba(15,29,46,.72); padding: 2px 7px; border-radius: 4px; }
 .tile .target:empty { display: none; }
+.tile .uwb { position: absolute; left: 8px; top: 30px; font: 600 11px var(--mono); color: #fff;
+  background: rgba(15,29,46,.72); padding: 2px 7px; border-radius: 4px; }
+.tile .uwb.live::after { content: "MEASURED"; margin-left: 6px; padding: 0 4px; border-radius: 3px;
+  background: #12b76a; color: #06281a; font-size: 9.5px; }
+.tile .uwb:empty { display: none; }
 .decide { display: none; gap: 10px; padding: 0 8px 8px; align-items: center; }
 .tile.sel .decide { display: flex; }
 .decide .q { flex: 1; font-size: 13px; color: var(--muted); min-width: 0; }
