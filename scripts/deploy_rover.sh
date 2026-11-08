@@ -20,7 +20,7 @@
 #
 # Wi-Fi: the venue isolates Wi-Fi clients, so over Wi-Fi the rover reaches the ground through the
 # Cloudflare tunnel (outbound HTTPS). The quick-tunnel URL changes when cloudflared restarts: re-run
-# "urls" (over the cable) after that. Link drops: the rover keeps searching/approaching on its own
+# "urls" (over the cable) after that: full steps in docs/rover-reconnect.md. Link drops: the rover keeps searching/approaching on its own
 # camera and stops by itself after --autonomy-s (60 s) without the ground.
 #
 # SDK elsewhere than /home/pi/TurboPi: TURBOPI_SDK=<folder on the rover> scripts/deploy_rover.sh ...
