@@ -63,7 +63,8 @@ MacBook Air (M1, 8 GB)                         Raspberry Pi 5 (16 GB), hostname 
   docker stop turbopi`); it comes back on reboot (`docker start turbopi` to restore sooner).
 - Self-test passed: forward, backward, spin clockwise and anticlockwise all correct
   (`set_velocity` yaw > 0 = clockwise). Pan = PWM servo 1 (servo 2 tilts); a lower pulse turns
-  the camera to the rover's right, so pan-sign -1. Camera 640x480 on `/dev/video0`.
+  the camera to the rover's right, so pan-sign -1. Camera 640x480 on `/dev/video0`, mounted turned
+  90 deg clockwise: the client rotates frames 270 (portrait 480x640).
 - Battery 7.58 V at 02:30 (2S pack: 8.4 V full, ~6.8 V low). No RTC/NTP: the clock was 89 days
   behind; set from the Mac with `sudo date -s @<epoch>` (repeat after a reboot).
 - websockets 17.4 copied from the Mac venv into `~/osprey-rover/` (pure Python fallback).
