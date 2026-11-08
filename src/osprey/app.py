@@ -631,8 +631,21 @@ def view_path(path: str) -> bool:
 
 @app.middleware("http")
 async def no_cache_static(request, call_next):
-    if via_tunnel(request.headers) and request.url.path not in TUNNEL_ALLOWED:
-        if not (request.method == "GET" and view_path(request.url.path) and viewer(request)):
+    path = request.url.path
+    if via_tunnel(request.headers) and path.startswith("/v/"):  # /v/<key>: same as /?k=<key>
+        import hmac
+
+        k = path[3:].strip("/")
+        if not hmac.compare_digest(k.encode(), view_key().encode()):
+            log.warning("tunnel: bad view key on %s", path[:6])
+            return JSONResponse({"error": "not available through the tunnel"}, status_code=403)
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie(VIEW_COOKIE, k, max_age=7 * 86400, httponly=True, secure=True, samesite="lax")
+        return resp
+    if via_tunnel(request.headers) and path not in TUNNEL_ALLOWED:
+        if not (request.method == "GET" and view_path(path) and viewer(request)):
+            log.warning("tunnel 403: %s %s key=%s cookie=%s", request.method, path,
+                        "k" in request.query_params, VIEW_COOKIE in request.cookies)
             return JSONResponse({"error": "not available through the tunnel"}, status_code=403)
     resp = await call_next(request)
     if request.url.path.startswith("/static"):

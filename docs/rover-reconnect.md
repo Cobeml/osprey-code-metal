@@ -28,7 +28,7 @@ curl -s -w ' %{http_code}\n' "$(ssh mob-pi '~/osprey/scripts/tunnel.sh url' | se
 View-only dashboard for a computer or phone that isn't on the Ethernet (new link each new tunnel;
 the key itself stays the same):
 ```bash
-ssh mob-pi '~/osprey/scripts/tunnel.sh view'       # https://<new>.trycloudflare.com/?k=<key>
+ssh mob-pi '~/osprey/scripts/tunnel.sh view'       # https://<new>.trycloudflare.com/v/<key>
 ```
 
 ## 2. Rover: rejoin the venue Wi-Fi (the human types the password)

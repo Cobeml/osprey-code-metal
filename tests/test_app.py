@@ -111,6 +111,10 @@ def test_tunnel_view_key_gives_read_only_dashboard(client):
     assert client.post("/api/commands", json={"cmd": "manual_mob"}, headers=h, cookies=ck).status_code == 403
     assert 'class="view-only"' not in client.get("/").text
     client.cookies.clear()
+    r = client.get(f"/v/{key}", headers=h, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/" and "osprey_view" in r.headers["set-cookie"]
+    assert client.get("/v/wrongwrongwrongwrong", headers=h, follow_redirects=False).status_code == 403
+    client.cookies.clear()
     phase = client.ground.engine.phase()
     with client.websocket_connect(f"/ws?k={key}", headers=h) as ws:
         ws.send_text(json.dumps({"type": "command", "command_id": "x1", "cmd": "manual_mob", "args": {}}))

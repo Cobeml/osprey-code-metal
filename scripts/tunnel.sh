@@ -17,5 +17,5 @@ case "${1:-start}" in
   stop) pkill -f "cloudflared tunnel .*--url"; echo stopped ;;
   url) echo "$(url)/scout" ;;
   view) k=$(curl -s localhost:8000/api/view_link | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')
-    [ -n "$k" ] && echo "$(url)/?k=$k" || { echo "ground server not answering"; exit 1; } ;;
+    [ -n "$k" ] && echo "$(url)/v/$k" || { echo "ground server not answering"; exit 1; } ;;
 esac
