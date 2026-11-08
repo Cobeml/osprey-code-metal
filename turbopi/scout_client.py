@@ -104,7 +104,17 @@ APPROACH_SPEED = 0.6       # fraction of DRIVE_SPEED while approaching
 HOLD_DEADBAND = 0.08      # while arrived, turn to re-centre when the ball is off-centre by more
 REAPPROACH_FRAC = 0.7     # while arrived, drive after the ball when its box shrinks below this
 ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as "arrived"
-ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
+ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.35, "none": 0.85}  # green: with a level camera the
+# ball slipped under the view at ~0.24 of the frame height; the tilt now follows it down
+# tilt camera (venue TurboPi: servo 2, higher pulse = down). Follows the ball down as the rover
+# closes in, and looks down for a ball that dropped out of the bottom of the frame.
+TILT_DOWN_LIMIT_US = 1500.0   # looking at the floor just in front of the chassis
+TILT_STEP_US = 50.0           # ~4.5 deg per step
+TILT_US_PER_DEG = 11.1
+TILT_LOW_Y = 0.7              # box centre below this (fraction of height): tilt down a step
+TILT_HIGH_Y = 0.35            # box centre above this: tilt back up a step (not above the start)
+TILT_LOST_Y = 0.6             # lost while this low: it went out the bottom, look down for it
+TILT_LOST_STEP_S = 0.15
 
 # pan camera (camera leads, body follows). Pan angle: 0 = straight ahead, + = right (clockwise).
 CAM_HFOV_DEG = 60.0       # measured on the venue TurboPi (upright mount, 03:45): 40 deg of pan moved the ball
@@ -123,8 +133,12 @@ class NoHardware:
     """Video-only scout: prints what it would do (driving not demonstrated)."""
 
     has_pan = False
+    tilt_base_us = None
 
     def set_pan(self, deg: float) -> None:
+        pass
+
+    def set_tilt(self, us: float) -> None:
         pass
 
     def drive(self, forward: float, turn: float) -> None:
@@ -201,11 +215,19 @@ class PulseServo:
 class HiwonderHardware(NoHardware):
     """Mecanum chassis through HiwonderSDK.mecanum (TurboPi image), plus an optional pan servo."""
 
-    def __init__(self, chassis=None, pan: "PulseServo" = None):
+    def __init__(self, chassis=None, pan: "PulseServo" = None, tilt: tuple = None):
+        """tilt: (fn, servo_id, start_us) for the camera tilt servo, or None."""
         self.chassis = chassis if chassis is not None else self._open_chassis()
         self.pan = pan
+        self.tilt = tilt
+        self.tilt_base_us = tilt[2] if tilt else None
         self.last = (0.0, 0.0, 0.0)
         atexit.register(self.stop)  # never leave the wheels turning when the client exits
+
+    def set_tilt(self, us: float) -> None:
+        if self.tilt is not None:
+            fn, sid, _ = self.tilt
+            fn(sid, int(us), 80)
 
     @property
     def has_pan(self) -> bool:
@@ -292,6 +314,10 @@ class Rover:
         self.decoys = 0     # red balls in the last onboard frame
         self.guide_src = None
         self.pan_deg = 0.0  # commanded pan angle (+ = right); stays 0 without a pan servo
+        self.tilt_us = getattr(hw, "tilt_base_us", None)   # None: no tilt servo
+        self.tilt_applied_ts = 0.0
+        self.tilt_step_ts = 0.0
+        self.last_cy = 0.5
         self.pan_applied_ts = 0.0  # sighting time last used for a pan correction
         self.sweep_dir = 1.0
         self.half_sweeps = 0
@@ -307,6 +333,39 @@ class Rover:
             self.lock_centre = (lx - (new - self.pan_deg) / CAM_HFOV_DEG, ly)
         self.pan_deg = new
         self.hw.set_pan(self.pan_deg)
+
+    # ----------------------------------------------------------- tilt camera
+    def _set_tilt(self, us: float) -> None:
+        if self.tilt_us is None:
+            return
+        base = self.hw.tilt_base_us
+        new = _clamp(us, min(base, TILT_DOWN_LIMIT_US), TILT_DOWN_LIMIT_US)
+        if new == self.tilt_us:
+            return
+        if self.lock_centre is not None:
+            # tilting down moves the ball up in the image: move the lock window with it
+            lx, ly = self.lock_centre
+            self.lock_centre = (lx, ly - (new - self.tilt_us) / TILT_US_PER_DEG / (CAM_HFOV_DEG * 0.75))
+        self.tilt_us = new
+        self.hw.set_tilt(new)
+
+    def _track_tilt(self, cy: float, sighting_ts: float) -> None:
+        """Keep the ball off the bottom edge as the rover closes in; once per new sighting."""
+        self.last_cy = cy
+        if self.tilt_us is None or sighting_ts <= self.tilt_applied_ts:
+            return
+        self.tilt_applied_ts = sighting_ts
+        if cy > TILT_LOW_Y:
+            self._set_tilt(self.tilt_us + TILT_STEP_US)
+        elif cy < TILT_HIGH_Y and self.tilt_us > self.hw.tilt_base_us:
+            self._set_tilt(self.tilt_us - TILT_STEP_US)
+
+    def _look_down_if_lost_low(self, now: float) -> None:
+        """Ball vanished while low in the frame: it went out the bottom, so tilt down for it."""
+        if self.tilt_us is not None and self.last_cy > TILT_LOST_Y and \
+                self.tilt_us < TILT_DOWN_LIMIT_US and now - self.tilt_step_ts >= TILT_LOST_STEP_S:
+            self.tilt_step_ts = now
+            self._set_tilt(self.tilt_us + TILT_STEP_US)
 
     def _track_pan(self, ex: float, sighting_ts: float) -> None:
         """Camera leads: re-centre the target in the image, once per new sighting."""
@@ -412,6 +471,9 @@ class Rover:
     # ----------------------------------------------------------- commands
     def set(self, state: str) -> None:
         if state != self.state:
+            if state == "searching" and self.tilt_us is not None:
+                self._set_tilt(self.hw.tilt_base_us)   # search at the start tilt, not at the floor
+                self.last_cy = 0.5
             self.state = state
             self.report(state)
 
@@ -420,6 +482,9 @@ class Rover:
         self.lock_centre = None  # a new dispatch starts a fresh search
         self.half_sweeps, self.spin_until = 0, 0.0
         self._set_pan(0.0)
+        if self.tilt_us is not None:
+            self._set_tilt(self.hw.tilt_base_us)   # start each run at the level-ish start tilt
+            self.last_cy = 0.5
         turn_s = abs(plan.get("heading_deg", 0.0)) / TURN_DEG_PER_S
         self.turn_dir = 1.0 if plan.get("heading_deg", 0.0) >= 0 else -1.0
         self.until = time.time() + turn_s
@@ -452,9 +517,11 @@ class Rover:
         self.last_tick = now
         guide = self._guide(now)
         fresh = guide is not None
-        if fresh and self.state == "arrived":   # camera leads only for small moves at the ball
+        if fresh and self.state in ("approaching", "arrived"):
             ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
-            self._track_pan(guide["err"][0], ts)
+            self._track_tilt(guide["err"][1] + 0.5, ts)
+            if self.state == "arrived":   # camera pan leads only for small moves at the ball
+                self._track_pan(guide["err"][0], ts)
         if self.state == "turning":
             if now < self.until:
                 self.hw.drive(0.0, 0.5 * self.turn_dir)
@@ -477,6 +544,7 @@ class Rover:
         elif self.state == "approaching":
             if not fresh:
                 self.hw.stop()  # hold on visual or link loss
+                self._look_down_if_lost_low(now)
                 last = max(self.follow_ts, self.local_ts)
                 if now - last > LOST_TO_SEARCH_S:
                     self.lock_centre = None
@@ -503,6 +571,7 @@ class Rover:
         elif self.state == "arrived":  # keep following the ball if it moves
             if not fresh:
                 self.hw.stop()
+                self._look_down_if_lost_low(now)
                 last = max(self.follow_ts, self.local_ts)
                 if now - last > LOST_TO_SEARCH_S:
                     self.lock_centre = None
@@ -748,9 +817,10 @@ def main():
                          a.pan_us_per_deg, a.pan_sign)
     if pan is not None and a.hw != "hiwonder":
         ap.error("--pan-call needs --hw hiwonder")
-    hw = HiwonderHardware(pan=pan) if a.hw == "hiwonder" else NoHardware()
-    if a.hw == "hiwonder" and a.tilt_us > 0 and pan is not None:
-        pan.fn(a.tilt_id, int(a.tilt_us), 300)   # camera level, pan centred
+    tilt = (pan.fn, a.tilt_id, a.tilt_us) if pan is not None and a.tilt_us > 0 else None
+    hw = HiwonderHardware(pan=pan, tilt=tilt) if a.hw == "hiwonder" else NoHardware()
+    if a.hw == "hiwonder" and tilt is not None:
+        hw.set_tilt(a.tilt_us)   # camera at the start tilt, pan centred
         pan.set(0.0)
     if a.selftest:
         selftest(hw)

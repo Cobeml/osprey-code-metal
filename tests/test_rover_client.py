@@ -392,3 +392,68 @@ def test_lock_window_moves_with_the_pan(monkeypatch):
     t[0] += 0.1
     r.on_local([{"bbox": (nx - 0.1, 0.4, nx + 0.1, 0.6), "confidence": 0.9}])
     assert r.local_ts == t[0]
+
+
+class TiltHW(PanHW):
+    tilt_base_us = 1000.0
+
+    def __init__(self):
+        super().__init__()
+        self.tilts = []
+
+    def set_tilt(self, us):
+        self.tilts.append(us)
+
+
+def _tilt_rover(monkeypatch, t):
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    hw = TiltHW()
+    r = sc.Rover(hw, lambda s: None)
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 0.0})
+    r.on_local([box(0.5, 0.5, 0.1)])
+    r.tick()
+    r.tick()
+    assert r.state == "approaching"
+    return r, hw
+
+
+def test_tilt_follows_a_low_ball_down_and_moves_the_lock(monkeypatch):
+    t = [2000.0]
+    r, hw = _tilt_rover(monkeypatch, t)
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.8, 0.15)])        # ball low in the frame as the rover closes in
+    r.tick()
+    assert r.tilt_us == 1000.0 + sc.TILT_STEP_US and hw.tilts[-1] == r.tilt_us
+    assert r.lock_centre[1] < 0.8            # window moved up with the tilt
+
+
+def test_lost_out_the_bottom_looks_down_up_to_the_limit(monkeypatch):
+    t = [2000.0]
+    r, hw = _tilt_rover(monkeypatch, t)
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.75, 0.2)])
+    r.tick()
+    for _ in range(18):                      # ball gone: keep looking down, never past the limit
+        t[0] += 0.15                         # (2.7 s: before LOST_TO_SEARCH_S gives up)
+        r.tick()
+    assert r.state == "approaching" and r.tilt_us == sc.TILT_DOWN_LIMIT_US
+
+
+def test_dispatch_resets_the_tilt(monkeypatch):
+    t = [2000.0]
+    r, hw = _tilt_rover(monkeypatch, t)
+    r._set_tilt(1400.0)
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 0.0})
+    assert r.tilt_us == 1000.0
+
+
+def test_search_restores_the_start_tilt(monkeypatch):
+    t = [2000.0]
+    r, hw = _tilt_rover(monkeypatch, t)
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.75, 0.2)])
+    r.tick()
+    for _ in range(25):                      # lost out the bottom, then gives up
+        t[0] += 0.2
+        r.tick()
+    assert r.state == "searching" and r.tilt_us == 1000.0
