@@ -27,7 +27,12 @@ curl -s -w ' %{http_code}\n' "$(ssh mob-pi '~/osprey/scripts/tunnel.sh url' | se
 
 ## 2. Rover: rejoin the venue Wi-Fi (the human types the password)
 Hiwonder's `wifi.service` brings its own hotspot back at every boot, so this is needed after each rover
-reboot. The name must be exactly `BASE-X Guest`, case included.
+reboot. The name must be exactly `BASE-X Guest`, case included. Right after boot the rover (running its
+hotspot) hasn't scanned yet, and the join fails with "No network with SSID found": scan first.
+```bash
+ssh pi@169.254.50.3 'sudo nmcli dev wifi rescan ifname wlan0; sleep 5; nmcli -t -f SSID dev wifi list ifname wlan0 | grep -c "^BASE-X Guest$"'
+```
+Then join:
 ```bash
 ssh -t -o BindInterface=en10 pi@169.254.50.3 "sudo nmcli --ask device wifi connect 'BASE-X Guest' ifname wlan0"
 ```
