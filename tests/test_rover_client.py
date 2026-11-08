@@ -218,6 +218,104 @@ def test_person_arrives_only_when_close(monkeypatch):
     assert r.onboard()["label"] == "person"
 
 
+class PanHW(HW):
+    has_pan = True
+
+    def __init__(self):
+        super().__init__()
+        self.pans = []
+
+    def set_pan(self, deg):
+        self.pans.append(round(deg, 2))
+
+
+def _pan_rover(monkeypatch, t):
+    monkeypatch.setattr(sc.time, "time", lambda: t[0])
+    hw = PanHW()
+    r = sc.Rover(hw, lambda s: None)
+    r.on_command({"type": "dispatch", "heading_deg": 0, "distance_m": 0.0})
+    r.tick()
+    r.tick()
+    t[0] += drive_window(0.0) + 0.1
+    r.tick()
+    r.tick()
+    assert r.state == "searching"
+    return r, hw
+
+
+def test_pan_search_sweeps_camera_before_spinning_body(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    seen = []
+    for _ in range(60):  # 6 s of ticks
+        t[0] += 0.1
+        r.tick()
+        seen.append((r.pan_deg, hw.cmds[-1]))
+    pans = [p for p, _ in seen]
+    step = sc.PAN_SWEEP_DEG_PER_S * 0.1
+    assert max(pans) >= sc.PAN_SWEEP_DEG - 1e-6 and min(pans) <= -sc.PAN_SWEEP_DEG + step
+    assert ("stop" in [c for _, c in seen])                      # body still while sweeping
+    assert (0.0, sc.SEARCH_TURN) in [c for _, c in seen]        # then a body spin step
+
+
+def test_pan_leads_and_body_turns_toward_pan_angle(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.75, 0.5, 0.1)])  # target right of centre
+    r.tick()
+    assert r.state == "approaching" and r.pan_deg > 0  # camera turned right toward it
+    r.tick()
+    turn = hw.cmds[-1][1]
+    assert turn > 0  # body turns right too
+    # camera now centred on the target at +pan: body still steers toward the pan angle
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.5, 0.1)])
+    r.tick()
+    assert abs(r._bearing(0.0) - r.pan_deg / sc.CAM_HFOV_DEG) < 1e-9 and hw.cmds[-1][1] > 0
+
+
+def test_pan_corrects_once_per_sighting(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.7, 0.5, 0.1)])
+    r.tick()
+    p1 = r.pan_deg
+    r.tick()  # no new frame: no second correction
+    assert r.pan_deg == p1
+
+
+def test_arrived_with_pan_follows_small_moves_with_camera_only(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r._set_pan(0.0)
+    r.on_local([box(0.5, 0.5, 0.5)])
+    r.tick()
+    r.tick()
+    assert r.state == "arrived"
+    t[0] += 0.1
+    r.on_local([box(0.56, 0.5, 0.5)])  # small move right
+    r.tick()
+    assert r.pan_deg > 0 and hw.cmds[-1] == "stop"  # camera follows, body holds
+    r._set_pan(30.0)                                 # far off the body axis now
+    t[0] += 0.1
+    r.on_local([box(0.5, 0.5, 0.5)])
+    r.tick()
+    assert hw.cmds[-1][0] == 0.0 and hw.cmds[-1][1] > 0  # body re-turns toward it
+
+
+def test_pulse_servo_mapping_and_limits():
+    calls = []
+    s = sc.PulseServo(lambda i, p, ms: calls.append((i, p, ms)), servo_id=2, center_us=1500,
+                      us_per_deg=10.0, sign=-1.0, move_ms=50, limit_deg=80)
+    s.set(0)
+    s.set(30)
+    s.set(200)
+    assert calls == [(2, 1500, 50), (2, 1200, 50), (2, 700, 50)]
+
+
 class FakeChassis:
     def __init__(self):
         self.calls = []

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Rover scout client for the Hiwonder TurboPi: camera -> Osprey (same binary WS protocol as the
-phone page); dispatch/follow/stop commands -> mecanum chassis. The rover has no pan-tilt: it
-steers its whole body toward the target.
+phone page); dispatch/follow/stop commands -> mecanum chassis and an optional pan servo.
+
+Pan camera (--pan-call ...): the camera leads, the body follows. While locked, the pan keeps the
+target centred in the image and the body steers toward pan angle + image error; searching sweeps
+the camera with the body still and spins the body only after a full sweep; while arrived, small
+moves are followed by the pan alone. Without --pan-call the body does all the steering.
 
 Usage on the TurboPi:
   python3 scout_client.py <url> [--node B] [--camera 0] [--hw none|hiwonder] [--onboard green|person|none]
-  python3 scout_client.py --selftest --hw hiwonder      # short guarded moves to check directions
+                          [--pan-call MODULE:FUNC --pan-id N --pan-center US --pan-sign 1|-1]
+  python3 scout_client.py --probe                       # list the SDK's servo/chassis calls (read-only)
+  python3 scout_client.py --selftest --hw hiwonder [--pan-call ...]   # short guarded moves
   <url> is ws://169.254.50.2:8000 on the wired switch, or the https://<tunnel> URL.
 
 Dispatch flow (rover starts beside the deck camera, facing along its optical axis):
@@ -81,9 +87,25 @@ REAPPROACH_FRAC = 0.7     # while arrived, drive after the ball when its box shr
 ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as "arrived"
 ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
 
+# pan camera (camera leads, body follows). Pan angle: 0 = straight ahead, + = right (clockwise).
+CAM_HFOV_DEG = 120.0      # horizontal field of view; retail listings say 120-130 deg wide angle
+PAN_LIMIT_DEG = 80.0
+PAN_GAIN = 0.6            # fraction of the image error (in deg) corrected per tick
+PAN_MAX_STEP_DEG = 6.0    # per tick (~10 Hz)
+PAN_DEADBAND_DEG = 2.0
+PAN_SWEEP_DEG = 70.0      # search sweep half-width
+PAN_SWEEP_DEG_PER_S = 60.0
+SEARCH_SPIN_S = 1.5       # after a full sweep with nothing seen, spin the body this long
+ARRIVED_BODY_DEG = 20.0   # while arrived, the body re-turns once the pan is past this
+
 
 class NoHardware:
     """Video-only scout: prints what it would do (driving not demonstrated)."""
+
+    has_pan = False
+
+    def set_pan(self, deg: float) -> None:
+        pass
 
     def drive(self, forward: float, turn: float) -> None:
         """forward in [-1, 1] (fraction of max speed), turn in [-1, 1] (+ = clockwise)."""
@@ -109,21 +131,65 @@ def _clamp(v: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
 
 
-class HiwonderHardware(NoHardware):
-    """Mecanum chassis through HiwonderSDK.mecanum (TurboPi image). No pan-tilt on this rover."""
+def _add_sdk_paths() -> None:
+    extra = os.environ.get("TURBOPI_SDK")
+    for p in ((extra,) if extra else ()) + SDK_PATHS:
+        p = os.path.normpath(p)
+        if os.path.isdir(p) and p not in sys.path:
+            sys.path.append(p)
 
-    def __init__(self, chassis=None):
+
+class PulseServo:
+    """Pan servo driven by a Hiwonder-style call fn(servo_id, pulse_us, move_ms).
+
+    UNVERIFIED: the TurboPi's servo call is not documented publicly. Run --probe on the rover to
+    list the SDK's servo functions, then pass e.g. --pan-call HiwonderSDK.Board:setPWMServoPulse
+    --pan-id <id>. Typical hobby servos: 500-2500 us over ~180 deg (≈11.1 us/deg), 1500 = centre;
+    check centre and direction with --selftest."""
+
+    def __init__(self, fn, servo_id: int, center_us: float = 1500.0, us_per_deg: float = 11.1,
+                 sign: float = 1.0, move_ms: int = 60, limit_deg: float = PAN_LIMIT_DEG):
+        self.fn, self.servo_id = fn, servo_id
+        self.center_us, self.us_per_deg, self.sign = center_us, us_per_deg, sign
+        self.move_ms, self.limit_deg = move_ms, limit_deg
+
+    def pulse(self, deg: float) -> int:
+        deg = _clamp(deg, -self.limit_deg, self.limit_deg)
+        return int(round(self.center_us + self.sign * deg * self.us_per_deg))
+
+    def set(self, deg: float) -> None:
+        self.fn(self.servo_id, self.pulse(deg), self.move_ms)
+
+    @staticmethod
+    def resolve(spec: str):
+        """'package.module:function' -> callable, importing from the TurboPi SDK path."""
+        import importlib
+
+        _add_sdk_paths()
+        mod, _, name = spec.partition(":")
+        return getattr(importlib.import_module(mod), name)
+
+
+class HiwonderHardware(NoHardware):
+    """Mecanum chassis through HiwonderSDK.mecanum (TurboPi image), plus an optional pan servo."""
+
+    def __init__(self, chassis=None, pan: "PulseServo" = None):
         self.chassis = chassis if chassis is not None else self._open_chassis()
+        self.pan = pan
         self.last = (0.0, 0.0, 0.0)
         atexit.register(self.stop)  # never leave the wheels turning when the client exits
 
+    @property
+    def has_pan(self) -> bool:
+        return self.pan is not None
+
+    def set_pan(self, deg: float) -> None:
+        if self.pan is not None:
+            self.pan.set(deg)
+
     @staticmethod
     def _open_chassis():
-        extra = os.environ.get("TURBOPI_SDK")
-        for p in ((extra,) if extra else ()) + SDK_PATHS:
-            p = os.path.normpath(p)
-            if os.path.isdir(p) and p not in sys.path:
-                sys.path.append(p)
+        _add_sdk_paths()
         try:
             import HiwonderSDK.mecanum as mecanum
         except ImportError as e:
@@ -197,6 +263,50 @@ class Rover:
         self.lock_centre = None
         self.decoys = 0     # red balls in the last onboard frame
         self.guide_src = None
+        self.pan_deg = 0.0  # commanded pan angle (+ = right); stays 0 without a pan servo
+        self.pan_applied_ts = 0.0  # sighting time last used for a pan correction
+        self.sweep_dir = 1.0
+        self.half_sweeps = 0
+        self.spin_until = 0.0
+        self.last_tick = None
+
+    # ----------------------------------------------------------- pan camera
+    def _set_pan(self, deg: float) -> None:
+        self.pan_deg = _clamp(deg, -PAN_LIMIT_DEG, PAN_LIMIT_DEG)
+        self.hw.set_pan(self.pan_deg)
+
+    def _track_pan(self, ex: float, sighting_ts: float) -> None:
+        """Camera leads: re-centre the target in the image, once per new sighting."""
+        if not self.hw.has_pan or sighting_ts <= self.pan_applied_ts:
+            return
+        self.pan_applied_ts = sighting_ts
+        err_deg = ex * CAM_HFOV_DEG
+        if abs(err_deg) > PAN_DEADBAND_DEG:
+            step = _clamp(PAN_GAIN * err_deg, -PAN_MAX_STEP_DEG, PAN_MAX_STEP_DEG)
+            self._set_pan(self.pan_deg + step)
+
+    def _bearing(self, ex: float) -> float:
+        """Target direction relative to the body, as a fraction of the camera's field of view
+        (equals the image error when the camera faces straight ahead)."""
+        return (self.pan_deg + ex * CAM_HFOV_DEG) / CAM_HFOV_DEG
+
+    def _search(self, now: float, dt: float) -> None:
+        """With a pan camera: sweep it with the body still, spin the body after each full sweep.
+        Without one: spin the body."""
+        if not self.hw.has_pan or now < self.spin_until:
+            self.hw.drive(0.0, SEARCH_TURN)
+            return
+        self.hw.stop()
+        nxt = self.pan_deg + self.sweep_dir * PAN_SWEEP_DEG_PER_S * dt
+        if abs(nxt) >= PAN_SWEEP_DEG:
+            nxt = PAN_SWEEP_DEG * self.sweep_dir
+            self.sweep_dir = -self.sweep_dir
+            self.half_sweeps += 1
+            if self.half_sweeps >= 2:  # looked both ways: turn the body to a fresh sector
+                self.half_sweeps = 0
+                nxt = 0.0
+                self.spin_until = now + SEARCH_SPIN_S
+        self._set_pan(nxt)
 
     # ----------------------------------------------------------- recognition
     def locked(self, now: float = None) -> bool:
@@ -239,6 +349,7 @@ class Rover:
         return {"label": label if fresh else None, "color": "green" if fresh and label == "green" else None,
                 "confidence": round(self.local["confidence"], 2) if fresh else None,
                 "decoys": self.decoys, "guide": self.guide_src, "locked": fresh,
+                "pan_deg": round(self.pan_deg, 1) if self.hw.has_pan else None,
                 "classifier": ballcolor is not None}
 
     def _guide(self, now: float):
@@ -261,6 +372,8 @@ class Rover:
     def dispatch(self, plan: dict) -> None:
         self.plan = plan
         self.lock_centre = None  # a new dispatch starts a fresh search
+        self.half_sweeps, self.spin_until = 0, 0.0
+        self._set_pan(0.0)
         turn_s = abs(plan.get("heading_deg", 0.0)) / TURN_DEG_PER_S
         self.turn_dir = 1.0 if plan.get("heading_deg", 0.0) >= 0 else -1.0
         self.until = time.time() + turn_s
@@ -281,8 +394,13 @@ class Rover:
     # ----------------------------------------------------------- control
     def tick(self) -> None:
         now = time.time()
+        dt = 0.1 if self.last_tick is None else _clamp(now - self.last_tick, 0.0, 0.2)
+        self.last_tick = now
         guide = self._guide(now)
         fresh = guide is not None
+        if fresh and self.state in ("driving", "searching", "approaching", "arrived"):
+            ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
+            self._track_pan(guide["err"][0], ts)
         if self.state == "turning":
             if now < self.until:
                 self.hw.drive(0.0, 0.5 * self.turn_dir)
@@ -301,7 +419,7 @@ class Rover:
             if fresh:
                 self.set("approaching")
             else:
-                self.hw.drive(0.0, SEARCH_TURN)
+                self._search(now, dt)
         elif self.state == "approaching":
             if not fresh:
                 self.hw.stop()  # hold on visual or link loss
@@ -310,14 +428,14 @@ class Rover:
                     self.lock_centre = None
                     self.set("searching")
                 return
-            ex, _ = guide["err"]
+            b = self._bearing(guide["err"][0])
             size = guide.get("size", 0.0)
             if size >= ARRIVE_BOX_H:
                 self.hw.stop()
                 self.set("arrived")
                 return
-            turn = _clamp(APPROACH_TURN_GAIN * ex, -APPROACH_MAX_TURN, APPROACH_MAX_TURN)
-            forward = 0.0 if abs(ex) > APPROACH_ALIGN_ERR else DRIVE_SPEED * APPROACH_SPEED
+            turn = _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN)
+            forward = 0.0 if abs(b) > APPROACH_ALIGN_ERR else DRIVE_SPEED * APPROACH_SPEED
             self.hw.drive(forward, turn)
         elif self.state == "arrived":  # keep following the ball if it moves
             if not fresh:
@@ -327,13 +445,16 @@ class Rover:
                     self.lock_centre = None
                     self.set("searching")  # ball left the frame: look for it again
                 return
-            ex, _ = guide["err"]
+            b = self._bearing(guide["err"][0])
+            # with a pan camera small moves are followed by the pan alone; the body re-turns
+            # only once the target is well off the body's axis
+            hold = ARRIVED_BODY_DEG / CAM_HFOV_DEG if self.hw.has_pan else HOLD_DEADBAND
             if guide.get("size", 1.0) < ARRIVE_BOX_H * REAPPROACH_FRAC:
                 self.set("approaching")  # ball moved away: drive after it
-            elif abs(ex) > HOLD_DEADBAND:
-                self.hw.drive(0.0, _clamp(APPROACH_TURN_GAIN * ex, -APPROACH_MAX_TURN, APPROACH_MAX_TURN))
+            elif abs(b) > hold:
+                self.hw.drive(0.0, _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN))
             else:
-                self.hw.stop()  # centred and close: hold
+                self.hw.stop()  # close and within the hold band: hold
 
 
 SELFTEST_S = 1.0
@@ -350,10 +471,62 @@ def selftest(hw) -> None:
             hw.drive(f, t)
             time.sleep(SELFTEST_S)
             hw.stop()
+        else:
+            if hw.has_pan and input("pan sweep: centre, 30 deg right, 30 deg left, centre? "
+                                    "[Enter = go, s = skip] ").strip().lower() != "s":
+                for deg in (0.0, 30.0, -30.0, 0.0):
+                    print(f"pan {deg:+.0f} deg")
+                    hw.set_pan(deg)
+                    time.sleep(SELFTEST_S)
+                print("If centre is off, adjust --pan-center; if +30 went left, pass --pan-sign -1.")
         print("Measure distance at DRIVE_SPEED and degrees at turn=0.5 over a longer run, then set\n"
               "DRIVE_M_PER_S / TURN_DEG_PER_S; flip SDK_YAW_SIGN if the clockwise spin went the other way.")
     finally:
         hw.stop()
+
+
+def probe() -> None:
+    """Read-only: where the Hiwonder SDK is and which servo/PWM/chassis functions it offers.
+    Paste the output back so the pan call can be filled in. Moves nothing."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    _add_sdk_paths()
+    print("python", sys.version.split()[0], "| sys.path additions:",
+          [p for p in sys.path if "TurboPi" in p or p == "/home/pi"])
+    try:
+        pkg = importlib.import_module("HiwonderSDK")
+    except ImportError as e:
+        print("HiwonderSDK not importable:", e)
+        print("try: find / -name '*.py' -path '*Hiwonder*' 2>/dev/null | head -50")
+        return
+    print("HiwonderSDK at", getattr(pkg, "__path__", "?"))
+    keys = ("servo", "pwm", "pulse", "velocity", "motor", "pan", "tilt")
+    for info in pkgutil.iter_modules(pkg.__path__):
+        name = f"HiwonderSDK.{info.name}"
+        try:
+            mod = importlib.import_module(name)  # import only; no function is called
+        except Exception as e:  # noqa: BLE001 - some SDK modules need hardware at import
+            print(f"  {name}: import failed ({type(e).__name__}: {e})")
+            continue
+        for attr, obj in inspect.getmembers(mod):
+            if any(k in attr.lower() for k in keys) and callable(obj):
+                try:
+                    sig = str(inspect.signature(obj))
+                except (TypeError, ValueError):
+                    sig = "(?)"
+                print(f"  {name}:{attr}{sig}")
+            elif inspect.isclass(obj) and obj.__module__ == mod.__name__:
+                for m, fn in inspect.getmembers(obj, callable):
+                    if any(k in m.lower() for k in keys):
+                        try:
+                            sig = str(inspect.signature(fn))
+                        except (TypeError, ValueError):
+                            sig = "(?)"
+                        print(f"  {name}:{attr}.{m}{sig}")
+    print("video devices:", sorted(p for p in os.listdir("/dev") if p.startswith("video"))
+          if os.path.isdir("/dev") else "?")
 
 
 async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
@@ -446,9 +619,25 @@ def main():
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--hw", default="none", choices=["none", "hiwonder"])
     ap.add_argument("--onboard", default="green", choices=["person", "green", "none"])
-    ap.add_argument("--selftest", action="store_true", help="guarded chassis moves, no network")
+    ap.add_argument("--selftest", action="store_true", help="guarded chassis/pan moves, no network")
+    ap.add_argument("--probe", action="store_true", help="list the Hiwonder SDK's servo/chassis calls; moves nothing")
+    ap.add_argument("--pan-call", default="", help="pan servo call fn(id, pulse_us, ms), e.g. "
+                    "HiwonderSDK.Board:setPWMServoPulse (find it with --probe); empty = no pan")
+    ap.add_argument("--pan-id", type=int, default=2)
+    ap.add_argument("--pan-center", type=float, default=1500.0, help="pulse (us) that points straight ahead")
+    ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
+    ap.add_argument("--pan-sign", type=float, default=1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
-    hw = HiwonderHardware() if a.hw == "hiwonder" else NoHardware()
+    if a.probe:
+        probe()
+        return
+    pan = None
+    if a.pan_call:
+        pan = PulseServo(PulseServo.resolve(a.pan_call), a.pan_id, a.pan_center,
+                         a.pan_us_per_deg, a.pan_sign)
+    if pan is not None and a.hw != "hiwonder":
+        ap.error("--pan-call needs --hw hiwonder")
+    hw = HiwonderHardware(pan=pan) if a.hw == "hiwonder" else NoHardware()
     if a.selftest:
         selftest(hw)
         return
