@@ -102,7 +102,8 @@ ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as
 ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
 
 # pan camera (camera leads, body follows). Pan angle: 0 = straight ahead, + = right (clockwise).
-CAM_HFOV_DEG = 120.0      # horizontal field of view; retail listings say 120-130 deg wide angle
+CAM_HFOV_DEG = 70.0       # measured on the venue TurboPi: 15 deg of pan moved the ball 0.29 of the (portrait,
+                          # x0.75) width -> ~52 deg across portrait, ~70 deg landscape. Listings say 120.
 PAN_LIMIT_DEG = 80.0
 PAN_GAIN = 0.6            # fraction of the image error (in deg) corrected per tick
 PAN_MAX_STEP_DEG = 6.0    # per tick (~10 Hz)
