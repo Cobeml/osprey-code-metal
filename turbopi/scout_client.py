@@ -41,10 +41,24 @@ import asyncio
 import atexit
 import json
 import os
+import signal
 import struct
 import sys
 import time
 import uuid
+
+
+async def _in_thread(fn):
+    """asyncio.to_thread needs Python 3.9; older Hiwonder images may ship 3.7/3.8."""
+    if hasattr(asyncio, "to_thread"):
+        return await asyncio.to_thread(fn)
+    return await asyncio.get_event_loop().run_in_executor(None, fn)
+
+
+def _exit_on_sigterm() -> None:
+    """kill / deploy_rover.sh stop sends SIGTERM, which skips atexit and finally blocks by
+    default; turn it into a normal exit so the wheels are always stopped."""
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 from pathlib import Path
 
 
@@ -591,7 +605,7 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
                 try:
                     while True:
                         t0 = time.time()
-                        ok, frame = await asyncio.to_thread(grab)
+                        ok, frame = await _in_thread(grab)
                         if not ok:
                             await asyncio.sleep(0.2)
                             continue
@@ -628,6 +642,7 @@ def main():
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
     ap.add_argument("--pan-sign", type=float, default=1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
+    _exit_on_sigterm()
     if a.probe:
         probe()
         return
