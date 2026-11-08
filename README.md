@@ -24,6 +24,12 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 | Scout B | Phone camera through an HTTPS tunnel (proxy for a second drone) |
 | Coordinator | Browser display on a laptop, wired to the ground processor |
 
+## Architecture
+
+![Osprey data flow: the water sensor and deck camera reach the ground Pi over USB; the TurboPi rover over Wi-Fi through a Cloudflare tunnel (Ethernet when docked); the phone (UAV proxy) through the tunnel. On the Pi, ingest feeds Hailo-8 perception, then the auto-MOB trigger and incident state machine, which drive drift, rover commands, the SQLite log and the coordinator gateway to the Mac browser over wired Ethernet.](docs/architecture.svg)
+
+Outlined boxes are devices; filled boxes are modules in `src/osprey/`. Dashed links are wireless: the rover (Wi-Fi while it drives, Ethernet only when docked) and the phone reach the Pi through an outbound Cloudflare tunnel, since the venue Wi-Fi isolates clients. The orange link to the coordinator is the outage test: pulling that cable leaves ground processing, logging and rover commands running.
+
 ## Two independent features
 
 | Feature | Location | Purpose | Run |
