@@ -108,8 +108,7 @@ ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
 
 # pan camera (camera leads, body follows). Pan angle: 0 = straight ahead, + = right (clockwise).
 CAM_HFOV_DEG = 60.0       # measured on the venue TurboPi (upright mount, 03:45): 40 deg of pan moved the ball
-                          # ~0.68 of the width -> ~60 deg. (Sideways mount had ~52 across the portrait,
-                          # x0.75) width -> ~52 deg across portrait, ~70 deg landscape. Listings say 120.
+                          # ~0.68 of the width -> ~60 deg. Retail listings say 120.
 PAN_LIMIT_DEG = 80.0
 PAN_GAIN = 0.5            # fraction of the image error (in deg) corrected per tick
 PAN_MAX_STEP_DEG = 4.0    # per tick (~10 Hz)
@@ -494,9 +493,13 @@ class Rover:
                 # body turn by the full bearing; pan + body together overshot and oscillated
                 self._set_pan(0.0)
             ts = self.local_ts if self.guide_src == "onboard" else self.follow_ts
-            turn = self._body_turn(b) if now - ts <= TURN_FRESH_S else 0.0
-            forward = 0.0 if abs(b) > APPROACH_ALIGN_ERR else DRIVE_SPEED * APPROACH_SPEED
-            self.hw.drive(forward, turn)
+            fresh_turn = now - ts <= TURN_FRESH_S
+            if abs(b) > APPROACH_ALIGN_ERR:   # well off-centre: turn in place (needs the minimum)
+                self.hw.drive(0.0, self._body_turn(b) if fresh_turn else 0.0)
+            else:                             # roughly centred: drive and steer gently (no minimum)
+                steer = 0.0 if abs(b) <= APPROACH_TURN_DEADBAND or not fresh_turn else \
+                    _clamp(APPROACH_TURN_GAIN * b, -APPROACH_MAX_TURN, APPROACH_MAX_TURN)
+                self.hw.drive(DRIVE_SPEED * APPROACH_SPEED, steer)
         elif self.state == "arrived":  # keep following the ball if it moves
             if not fresh:
                 self.hw.stop()
@@ -724,8 +727,8 @@ def main():
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
     ap.add_argument("--tilt-id", type=int, default=2, help="tilt servo (venue TurboPi: 2)")
     # venue TurboPi (upright mount): lower pulse = camera up; 1200-1500 point at the floor,
-    # 800-900 is about level
-    ap.add_argument("--tilt-us", type=float, default=900.0, help="tilt pulse set at start; 0 = leave it")
+    # 800-900 is about level; 1000 (slightly down) keeps a close ball in frame on arrival
+    ap.add_argument("--tilt-us", type=float, default=1000.0, help="tilt pulse set at start; 0 = leave it")
     ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()

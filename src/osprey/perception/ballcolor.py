@@ -70,7 +70,10 @@ def color_blobs(bgr: np.ndarray, color: str, bands: Optional[tuple] = None,
         x, y, bw, bh = cv2.boundingRect(c)
         aspect = min(bw, bh) / max(bw, bh)
         fill = area / float(bw * bh)
-        if aspect < MIN_ASPECT or fill < MIN_FILL:
+        # a ball cut off by the frame edge (e.g. right in front of a level rover camera) is not
+        # round in the image: keep it if it touches the edge and still fills its box
+        touches = x <= 1 or y <= 1 or x + bw >= w - 1 or y + bh >= h - 1
+        if (aspect < MIN_ASPECT and not touches) or fill < MIN_FILL:
             continue
         conf = float(min(MAX_CONF, 0.4 + 0.35 * aspect + 0.25 * min(1.0, fill / DISC_FILL)))
         out.append({"bbox": (x / w, y / h, (x + bw) / w, (y + bh) / h), "confidence": conf,

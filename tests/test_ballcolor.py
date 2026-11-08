@@ -84,3 +84,17 @@ def test_merge_prefers_colour_label_over_unknown():
 
 def test_sim_detections_without_cls_stay_targets():
     assert is_target({"bbox": (0, 0, 1, 1), "confidence": 0.9})
+
+
+def test_ball_cut_by_bottom_edge_still_found():
+    """Right in front of a level rover camera the ball is cut off by the frame edge."""
+    img = scene()
+    cv2.circle(img, (320, H - 10), 90, GREEN, -1)       # mostly below the bottom edge
+    blobs = ballcolor.color_blobs(img, ballcolor.TARGET)
+    assert blobs and blobs[0]["bbox"][3] > 0.97
+
+
+def test_non_round_blob_in_the_middle_still_rejected():
+    img = scene()
+    cv2.rectangle(img, (100, 200), (500, 230), GREEN, -1)  # long green stripe, not a ball
+    assert ballcolor.color_blobs(img, ballcolor.TARGET) == []
