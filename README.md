@@ -20,8 +20,8 @@ A ship's deck camera sees someone go over the rail and declares **man overboard*
 |---|---|
 | Ship deck camera | Deptrum Aurora 930 RGB-D: rail-crossing trigger and real relative position |
 | Ground processor | Raspberry Pi 5 + Hailo-8 person detection |
-| Scout A | Hiwonder TurboPi rover with a pan-tilt camera that follows the person (ground stand-in for a drone) |
-| Scout B | Phone camera through an HTTPS tunnel (proxy for a second drone) |
+| Scout A | Phone camera through an HTTPS tunnel, acting as the UAV proxy (stand-in for the drone's view) |
+| Scout B | Hiwonder TurboPi rover on Wi-Fi: locks on, drives to and follows the person (ground stand-in for a drone) |
 | Coordinator | Browser display on a laptop, wired to the ground processor |
 
 ## Architecture
