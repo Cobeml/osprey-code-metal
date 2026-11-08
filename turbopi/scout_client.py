@@ -107,7 +107,8 @@ ARRIVE_BOX_H = 0.85       # target box height (fraction of frame) that counts as
 ARRIVE_BY_TARGET = {"person": 0.85, "green": 0.45, "none": 0.85}
 
 # pan camera (camera leads, body follows). Pan angle: 0 = straight ahead, + = right (clockwise).
-CAM_HFOV_DEG = 70.0       # measured on the venue TurboPi: 15 deg of pan moved the ball 0.29 of the (portrait,
+CAM_HFOV_DEG = 60.0       # measured on the venue TurboPi (upright mount, 03:45): 40 deg of pan moved the ball
+                          # ~0.68 of the width -> ~60 deg. (Sideways mount had ~52 across the portrait,
                           # x0.75) width -> ~52 deg across portrait, ~70 deg landscape. Listings say 120.
 PAN_LIMIT_DEG = 80.0
 PAN_GAIN = 0.5            # fraction of the image error (in deg) corrected per tick
@@ -707,8 +708,8 @@ def main():
     ap.add_argument("url", nargs="?")
     ap.add_argument("--node", default="B")
     ap.add_argument("--camera", type=int, default=0)
-    # venue TurboPi: the camera is mounted turned 90 deg clockwise, so frames are turned back 270
-    ap.add_argument("--rotate", type=int, default=270, choices=[0, 90, 180, 270],
+    # venue TurboPi: camera remounted upright (landscape) at 03:40; 270 undoes a 90 deg clockwise mount
+    ap.add_argument("--rotate", type=int, default=0, choices=[0, 90, 180, 270],
                     help="clockwise degrees applied to every frame (270 = undo a 90 deg clockwise mount)")
     ap.add_argument("--hw", default="none", choices=["none", "hiwonder"])
     ap.add_argument("--onboard", default="green", choices=["person", "green", "none"])
@@ -722,9 +723,9 @@ def main():
     ap.add_argument("--pan-center", type=float, default=1500.0, help="pulse (us) that points straight ahead")
     ap.add_argument("--pan-us-per-deg", type=float, default=11.1)
     ap.add_argument("--tilt-id", type=int, default=2, help="tilt servo (venue TurboPi: 2)")
-    # venue TurboPi: lower pulse = camera up; 1400-1800 all point at the floor, 900 is about level,
-    # 1000 keeps the room and the floor near the rover in view
-    ap.add_argument("--tilt-us", type=float, default=1000.0, help="tilt pulse set at start; 0 = leave it")
+    # venue TurboPi (upright mount): lower pulse = camera up; 1200-1500 point at the floor,
+    # 800-900 is about level
+    ap.add_argument("--tilt-us", type=float, default=900.0, help="tilt pulse set at start; 0 = leave it")
     ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
