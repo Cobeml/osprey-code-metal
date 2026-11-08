@@ -310,7 +310,8 @@ function fitRect(cv, img) {
   const s = Math.min(cv.width / iw, cv.height / ih);
   return { x: (cv.width - iw * s) / 2, y: (cv.height - ih * s) / 2, w: iw * s, h: ih * s };
 }
-const BOX_COLORS = { tracking: "#32d583", candidate: "#f97066", detection: "#98a2b3", person: "#fdb022", ball: "#32d583" };
+const BOX_COLORS = { tracking: "#32d583", candidate: "#f97066", detection: "#98a2b3", person: "#fdb022", ball: "#32d583",
+  decoy: "#b42318", "ball?": "#98a2b3" };
 const CANVAS_FONT = "Inter, -apple-system, sans-serif";
 
 function drawBoxes(ctx, fit, header, dim) {
@@ -323,11 +324,12 @@ function drawBoxes(ctx, fit, header, dim) {
     ctx.lineWidth = sel ? 5 : 3;
     ctx.globalAlpha = dim ? 0.6 : 1;
     ctx.beginPath(); ctx.roundRect(bx, by, (x2 - x1) * fit.w, (y2 - y1) * fit.h, 6); ctx.stroke();
-    const lbl = (b.state === "person" || b.state === "ball") ? `${b.state}${b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : ""}` : `${b.state} ${Math.round(b.confidence * 100)}%`;
+    const lbl = (b.state === "person" || b.state === "ball") ? `${b.state}${b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : ""}`
+      : b.state === "decoy" ? "red · decoy" : `${b.state} ${Math.round(b.confidence * 100)}%`;
     ctx.font = `700 17px ${CANVAS_FONT}`;
     const tw = ctx.measureText(lbl).width, ly = Math.max(0, by - 26);
     ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(bx - 1.5, ly, tw + 14, 24, 5); ctx.fill();
-    ctx.fillStyle = b.state === "candidate" ? "#fff" : "#06281a";
+    ctx.fillStyle = (b.state === "candidate" || b.state === "decoy") ? "#fff" : "#06281a";
     ctx.fillText(lbl, bx + 5.5, ly + 17);
     ctx.globalAlpha = 1;
   }
@@ -345,7 +347,12 @@ function renderFeeds() {
     const isRover = snap && snap.roles && node === snap.roles.rover;
     if (isRover && snap.dispatch && ns && !ns.has_target && pill !== "CANDIDATE" && pill !== "NO VIDEO")
       pill = ({ dispatched: "EN ROUTE", driving: "EN ROUTE", searching: "SEARCHING", approaching: "APPROACHING" })[snap.dispatch.status] || snap.dispatch.status.toUpperCase();
-    if (isRover && snap.dispatch && snap.dispatch.status === "arrived") pill = "ON SCENE";
+    let pillNote = "";
+    if (isRover && snap.dispatch && snap.dispatch.status === "arrived") {
+      pill = "ON SCENE";
+      const ob = snap.dispatch.onboard;
+      if (ob && ob.color === "green") pillNote = " · green confirmed onboard";
+    }
     const SRC = { sim: ["SIM", ""], file: ["RECORDED", ""], usb: ["LIVE FPV", "real"], aurora: ["AURORA", "real"], ws: ["LIVE", "real"], uvc: ["LIVE", "real"] };
     if (ns) {
       const role = node === "ship" ? "Ship deck cam" : snap.roles && node === snap.roles.rover ? `Rover ${node}` : snap.roles && node === snap.roles.drone ? `Drone ${node}` : `Scout ${node}`;
@@ -360,7 +367,7 @@ function renderFeeds() {
     if (!tg) { tg = document.createElement("div"); tg.className = "target"; vid.appendChild(tg); }
     tg.textContent = ns && ns.target && node !== "ship" ? "target: " + (ns.target === "ball" ? "green ball" : ns.target) : "";
     const pe = tile.querySelector(".pill");
-    pe.textContent = pill + (linkUp || !snap ? "" : " · as of link loss");
+    pe.textContent = pill + pillNote + (linkUp || !snap ? "" : " · as of link loss");
     pe.className = "pill " + pill.replace(" ", "_");
     const hasCand = !!(ns && ns.candidates.length && snap.incident && !snap.incident.ended);
     tile.classList.toggle("sel", hasCand);

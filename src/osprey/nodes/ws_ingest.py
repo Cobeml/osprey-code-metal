@@ -86,7 +86,9 @@ class ScoutIngest:
                     elif "sync" in m:
                         c.offset.add(m["sync"] / 1000, m["srv"] / 1000, m["recv"] / 1000)
                     elif m.get("type") == "rover_state" and node_id == self.g.rover:
-                        self.g.rover_report(str(m.get("state", "")))
+                        ob = m.get("onboard")
+                        self.g.rover_report(str(m.get("state", "")),
+                                            ob if isinstance(ob, dict) else None)
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:

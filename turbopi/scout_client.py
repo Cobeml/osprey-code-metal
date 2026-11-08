@@ -10,7 +10,13 @@ Dispatch flow (rover starts beside the deck camera, facing along its optical axi
   no wheel encoders) -> "searching": rotate slowly while the ground looks for the target in this
   camera -> once the ground associates the target it sends follow errors -> "approaching": turn
   toward the box and creep forward until the box is big enough -> "arrived" (stop).
-  Every state change is reported as {"type":"rover_state","state":...}.
+  Every state change is reported as {"type":"rover_state","state":...,"onboard":{...}}.
+
+Onboard colour check: the rover's own Pi runs the same green/red ball classifier as the ground
+(src/osprey/perception/ballcolor.py; copy it next to this file or run from the repo). While the
+link is up but the ground has no fresh follow error (e.g. the ground lost the box), the rover
+steers on its own green-ball detection; red balls are decoys and never steer it. Ground follow
+errors take priority, stop always wins, and the rover still stops if the link drops.
 
 Protocol: binary uint32 LE header_len | header JSON | JPEG, header {node_id, session_id, seq,
 capture_ts_ms, width, height}; clock pings {"ping": ms} -> {"pong","srv"} -> {"sync","srv","recv"}.
@@ -22,10 +28,33 @@ import argparse
 import asyncio
 import json
 import struct
+import sys
 import time
 import uuid
+from pathlib import Path
 
 import websockets
+
+
+def _load_ballcolor():
+    """Same classifier as the ground: next to this file, installed osprey, or the repo's src/."""
+    here = Path(__file__).resolve().parent
+    for p in (here, here.parent / "src"):
+        if str(p) not in sys.path:
+            sys.path.append(str(p))
+    try:
+        import ballcolor  # copied next to this file on the rover
+        return ballcolor
+    except ImportError:
+        pass
+    try:
+        from osprey.perception import ballcolor
+        return ballcolor
+    except ImportError:
+        return None
+
+
+ballcolor = _load_ballcolor()
 
 DEADBAND = 0.15
 KP_DEG = 25.0        # degrees per unit normalized error per update
@@ -77,6 +106,39 @@ class Rover:
         self.plan = None
         self.follow = None  # last follow message
         self.follow_ts = 0.0
+        self.local = None   # onboard green-ball sighting, same shape as a follow message
+        self.local_ts = 0.0
+        self.decoys = 0     # red balls in the last onboard frame
+        self.guide_src = None
+
+    def on_local(self, target, decoys: int = 0) -> None:
+        """Onboard classifier result for one frame (target: {"bbox","confidence"} or None)."""
+        self.decoys = decoys
+        if target is None:
+            return
+        x1, y1, x2, y2 = target["bbox"]
+        self.local = {"err": [(x1 + x2) / 2 - 0.5, (y1 + y2) / 2 - 0.5], "size": y2 - y1,
+                      "confidence": target["confidence"]}
+        self.local_ts = time.time()
+
+    def onboard(self) -> dict:
+        """What the rover's own camera says, reported with every state change."""
+        fresh = self.local is not None and time.time() - self.local_ts <= STALE_S
+        return {"color": "green" if fresh else None,
+                "confidence": round(self.local["confidence"], 2) if fresh else None,
+                "decoys": self.decoys, "guide": self.guide_src,
+                "classifier": ballcolor is not None}
+
+    def _guide(self, now: float):
+        """Ground follow error first, then the onboard green sighting, else None."""
+        if self.follow is not None and now - self.follow_ts <= STALE_S:
+            self.guide_src = "ground"
+            return self.follow
+        if self.local is not None and now - self.local_ts <= STALE_S:
+            self.guide_src = "onboard"
+            return self.local
+        self.guide_src = None
+        return None
 
     def set(self, state: str) -> None:
         if state != self.state:
@@ -104,7 +166,8 @@ class Rover:
 
     def tick(self) -> None:
         now = time.time()
-        fresh = self.follow is not None and now - self.follow_ts <= STALE_S
+        guide = self._guide(now)
+        fresh = guide is not None
         if self.state == "turning":
             if now < self.until:
                 self.hw.drive(0.0, 0.5 * self.turn_dir)
@@ -126,10 +189,11 @@ class Rover:
         elif self.state == "approaching":
             if not fresh:
                 self.hw.stop()  # hold on visual or link loss
-                self.set("searching" if now - self.follow_ts > 3.0 else "approaching")
+                last = max(self.follow_ts, self.local_ts)
+                self.set("searching" if now - last > 3.0 else "approaching")
                 return
-            ex, _ = self.follow["err"]
-            size = self.follow.get("size", 0.0)
+            ex, _ = guide["err"]
+            size = guide.get("size", 0.0)
             if size >= ARRIVE_BOX_H:
                 self.hw.stop()
                 self.set("arrived")
@@ -137,7 +201,7 @@ class Rover:
             turn = max(-0.4, min(0.4, 1.2 * ex))
             forward = 0.0 if abs(ex) > 0.25 else DRIVE_SPEED * 0.6
             self.hw.drive(forward, turn)
-        elif self.state == "arrived" and fresh and self.follow.get("size", 1.0) < ARRIVE_BOX_H * 0.7:
+        elif self.state == "arrived" and fresh and guide.get("size", 1.0) < ARRIVE_BOX_H * 0.7:
             self.set("approaching")  # target drifted away again
 
 
@@ -180,7 +244,17 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0):
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     follower = Follower(hw)
     outbox: list = []
-    rover = Rover(hw, lambda st: outbox.append({"type": "rover_state", "state": st}))
+    rover = Rover(hw, lambda st: outbox.append({"type": "rover_state", "state": st,
+                                                "onboard": rover.onboard()}))
+    if ballcolor is None:
+        print("onboard classifier unavailable (ballcolor.py not found): ground guidance only")
+
+    def grab():
+        ok, frame = cap.read()
+        if ok and ballcolor is not None:
+            res = ballcolor.find_balls(frame)
+            rover.on_local(res["target"], len(res["decoys"]))
+        return ok, frame
     session = "turbopi-" + uuid.uuid4().hex[:6]
     seq = 0
     ws_url = url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + f"/ws/scout?node={node}"
@@ -217,7 +291,7 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0):
                 try:
                     while True:
                         t0 = time.time()
-                        ok, frame = await asyncio.to_thread(cap.read)
+                        ok, frame = await asyncio.to_thread(grab)
                         if not ok:
                             await asyncio.sleep(0.2)
                             continue
