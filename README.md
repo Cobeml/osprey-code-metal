@@ -6,9 +6,9 @@ Team 29, CodeMetal Forge 2026.
 
 ### Demo video (real hardware run)
 
-[![Osprey demo: the drone feed flags the green ball as the candidate and rejects the red decoy (click for the 88 s video with sound)](docs/media/osprey-demo.jpg)](videos/osprey-demo-web.mp4)
+[![Osprey demo: the drone feed flags the green ball as the candidate and rejects the red decoy (click for the 88 s video with sound)](docs/media/osprey-demo.jpg)](https://drive.google.com/file/d/1qYAAouRkvffP3kz8eknNH4pTXRxTkwrf/view?usp=sharing)
 
-Click the still for the 88 s demo with sound. The deck camera arms on the green ball (the stand-in for a person in the water). When the ball goes over, the coordinator opens a man-overboard incident and shows the drift search area. The drone feed then flags the green ball and ignores the red decoys, and the rover drives to it.
+Click the still to watch the demo with sound [on Google Drive](https://drive.google.com/file/d/1qYAAouRkvffP3kz8eknNH4pTXRxTkwrf/view?usp=sharing). The deck camera arms on the green ball (the stand-in for a person in the water). When the ball goes over, the coordinator opens a man-overboard incident and shows the drift search area. The drone feed then flags the green ball and ignores the red decoys, and the rover drives to it.
 
 ### Mission simulation (concept)
 
