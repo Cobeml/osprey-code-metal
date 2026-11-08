@@ -26,9 +26,11 @@ from .incident import IncidentEngine
 from .nodes.aurora import AuroraNode
 from .nodes.capture import CaptureNode, list_uvc
 from .nodes.sim import SimScout, SimShipCam
+from .nodes.water import WaterSensor
 from .nodes.ws_ingest import ScoutIngest
 from .perception.detector import make_detector
 from .perception.targets import detect_targets, is_target
+from .overboard import BallWaterTrigger
 from .scenario import Scenario
 from .shipcam import RailTrigger
 from .store import EventStore
@@ -59,6 +61,10 @@ class Ground:
         self.drift = DriftEstimator(self.forcing, settings.drift_particles)
         self.drift_view: Optional[dict] = None
         self.trigger = RailTrigger(settings.rail_m, settings.rail_hysteresis_m, settings.rail_frames)
+        self.ball_trigger = BallWaterTrigger(settings.ball_lost_after_s)
+        self.water_trigger_enabled = settings.water_trigger
+        self.water = WaterSensor(settings.water_port, settings.water_pin, settings.water_active_low,
+                                 on_change=self._water_changed)
         self.gateway = Gateway(self.clock)
         self.gateway.history_fn = self._history
         self.gateway.command_fn = self.handle_ws_command
@@ -104,11 +110,13 @@ class Ground:
         self.detector = await asyncio.to_thread(make_detector, self.s.detector, self.s.hef_path)
         log.warning("detector: %s", type(self.detector).__name__ if self.detector else "none")
         self.tasks.append(asyncio.create_task(self.aurora.run()))
+        self.water.start()
         self.tasks += self.scouts.start(("A", "B"))
         self.tasks.append(asyncio.create_task(self._state_loop()))
         self.tasks.append(asyncio.create_task(self._sim_loop()))
 
     async def stop(self) -> None:
+        self.water.stop()
         for t in self.tasks:
             t.cancel()
 
@@ -133,6 +141,7 @@ class Ground:
                 self.scenario.end()
                 self.sim_ship.reset()
                 self.trigger.reset()
+                self.ball_trigger.reset()
                 self.drift.clear()
             self.gateway.publish_event(e)
         # follow-ups go out after the events that caused them
@@ -186,6 +195,10 @@ class Ground:
                 balls = [{"track_id": 9001, "bbox": (0.47, 0.47, 0.53, 0.53), "confidence": 0.9,
                           "cls": "green", "z_m": sb["z_m"], "x_m": sb["x_m"], "sim": True}]
                 dets = dets + balls
+            greens = [d for d in dets if d.get("cls") == "green"]
+            if greens and not self.engine.active:
+                g = max(greens, key=lambda d: d["confidence"])
+                self.ball_trigger.ball_seen(now, g.get("x_m"), g.get("z_m"))
             tdets = []
             if balls:
                 b = max(balls, key=lambda d: d["confidence"])
@@ -272,6 +285,36 @@ class Ground:
                   "boxes": boxes, "source": source}
         self.gateway.publish_frame(node_id, header, jpeg)
 
+    # -------------------------------------------------------------- ball + water trigger
+    def _water_changed(self, wet: bool) -> None:  # sensor thread
+        if wet and self.loop:
+            self.loop.call_soon_threadsafe(self.check_overboard)
+
+    def check_overboard(self) -> None:
+        """MOB when the deck camera has lost the green ball and the water sensor is wet."""
+        if not self.water_trigger_enabled or not self.engine.armed:
+            return
+        now = self.clock.now()
+        trig = self.ball_trigger.update(now, bool(self.water.wet) and self.water.online)
+        if not trig:
+            return
+        cam = self.sources.get("ship", "sim")
+        z = trig["z_m"] or self.s.rail_m + 0.5
+        p = self.ship.camera_point(trig["x_m"] or 0.0, z)
+        prov = "real_relative" if cam == "aurora" and trig["z_m"] else "simulated"
+        loc = Location(lat=p.lat, lon=p.lon, provenance=prov, quality="good",
+                       accuracy_m=0.5 if prov == "real_relative" else None)
+        events = self.engine.open_mob(f"mob:ballwater:{int(now * 1000)}", now, loc, None, "shipcam",
+                                      detail={**trig, "camera": cam, "trigger": "ball_water"})
+        if events and events[0]["type"] == "mob":
+            log.warning("MOB: %s", trig["reason"])
+            self.trigger.fired = True
+            if "ship" in self.latest_jpeg:
+                ref = self.save_evidence("ship", "mob-ball-water.jpg", self.latest_jpeg["ship"])
+                self.engine.incident.mob_image_ref = ref
+                events[0]["image_ref"] = ref
+        self.record(events)
+
     # -------------------------------------------------------------- loops
     async def _sim_loop(self) -> None:
         period = 1.0 / self.s.sim_fps
@@ -307,6 +350,7 @@ class Ground:
         while True:
             try:
                 self.record(self.engine.tick())
+                self.check_overboard()
                 self.capture.ensure()
                 now = self.clock.now()
                 # the search area starts expanding the moment no camera holds visual contact
@@ -343,6 +387,12 @@ class Ground:
                         "row": self.s.rail_row_frac or None,
                         "persons": [{"track_id": d["track_id"], "z_m": d.get("z_m")}
                                     for d in self.last_ship_dets]}
+        bt, w = self.ball_trigger, self.water
+        snap["overboard"] = {"enabled": self.water_trigger_enabled, "armed": bt.armed,
+                             "ball_in_view": bt.in_view(now),
+                             "ball_last_seen_ts": bt.last_seen,
+                             "water": None if not w.online else ("wet" if w.wet else "dry"),
+                             "sensor_status": w.status, "pin": f"D{w.pin}"}
         snap["aurora"] = {"status": self.aurora.status, "restarts": self.aurora.restarts,
                           **{k: round(v, 1) for k, v in self.aurora.timing.items()}}
         snap["detector"] = type(self.detector).__name__ if self.detector else "none"
@@ -489,8 +539,9 @@ class Ground:
             return {"command_id": cmd.command_id, "ok": True,
                     "message": f"person reappears {a.get('dist_m', 30)} m downstream"}
         if t == "set_trigger":
-            self.trigger_enabled = bool(a.get("enabled", True))
+            self.trigger_enabled = self.water_trigger_enabled = bool(a.get("enabled", True))
             self.trigger.reset()
+            self.ball_trigger.reset()
             return {"command_id": cmd.command_id, "ok": True,
                     "message": "auto-MOB " + ("on" if self.trigger_enabled else "off")}
         if t == "set_rail":

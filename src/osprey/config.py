@@ -26,6 +26,12 @@ class Settings:
     rail_hysteresis_m: float = 0.15
     rail_frames: int = 3
     cam_height_m: float = 1.1
+    # ball-overboard trigger: the deck cam loses the green ball AND the water sensor reads wet
+    water_trigger: bool = True
+    water_port: str = "auto"       # auto = the Seeeduino's CP2102N under /dev/serial/by-id; off
+    water_pin: int = 5             # Grove base-shield digital port the sensor is plugged into
+    water_active_low: bool = True  # Grove water sensor SIG goes LOW when wet
+    ball_lost_after_s: float = 0.5
     aurora_mode: int = 2
     aurora_flip: bool = False
     rail_row_frac: float = 0.0  # where to draw the rail on the real ship-cam video (0 = off)

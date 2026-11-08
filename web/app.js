@@ -570,10 +570,13 @@ function renderFeeds() {
       drawBoxes(ctx, fit, f.liveHeader, false);
       if (node === "ship" && snap && snap.rail && snap.rail.row && f.liveHeader.source !== "sim") drawRail(ctx, fit);
       if (node === "ship" && snap && snap.rail && f.liveHeader.source !== "sim") {
-        const txt = snap.rail.trigger_enabled ? `rail ${snap.rail.rail_m.toFixed(2)} m · auto-MOB ${snap.rail.armed ? "ARMED" : "on"}` : "auto-MOB off · rail not calibrated";
+        const ob = snap.overboard;
+        const txt = ob && ob.enabled ? overboardText(ob)
+          : snap.rail.trigger_enabled ? `rail ${snap.rail.rail_m.toFixed(2)} m · auto-MOB ${snap.rail.armed ? "ARMED" : "on"}` : "auto-MOB off · rail not calibrated";
+        const on = ob && ob.enabled ? true : snap.rail.trigger_enabled;
         ctx.font = "bold 16px sans-serif"; const w = ctx.measureText(txt).width + 14;
         ctx.fillStyle = "rgba(0,0,0,.65)"; ctx.fillRect(cv.width - w - 8, cv.height - 30, w, 24);
-        ctx.fillStyle = snap.rail.trigger_enabled ? "#f2cc60" : "#c9d1d9"; ctx.fillText(txt, cv.width - w - 1, cv.height - 12);
+        ctx.fillStyle = ob && ob.water === "wet" ? "#4fc3f7" : on ? "#f2cc60" : "#c9d1d9"; ctx.fillText(txt, cv.width - w - 1, cv.height - 12);
       }
       if (ns && ns.lost && ns.last_accepted) {
         ageText = `visual lost · last seen ${fmtAge(t - ns.last_accepted.capture_ts)} ago`;
@@ -610,6 +613,13 @@ function drawInset(ctx, cv, img, hdr) {
   ctx.fillStyle = "#fff"; ctx.font = `600 13px ${CANVAS_FONT}`; ctx.fillText("last sighting grab", x + 6, y + h - 6);
 }
 
+function overboardText(ob) {
+  const ball = ob.ball_in_view ? "ball in view" : ob.ball_last_seen_ts ? "ball LOST" : "no ball yet";
+  const water = ob.water === "wet" ? "water WET" : ob.water === "dry" ? "water dry" : `water sensor offline`;
+  const mob = snap.incident && !snap.incident.ended ? "" : ` · auto-MOB ${ob.armed ? "ARMED" : "waiting for ball"}`;
+  return `${ball} · ${water}${mob}`;
+}
+
 function drawRail(ctx, fit) {
   const y = fit.y + snap.rail.row * fit.h;
   ctx.strokeStyle = "#fdb022"; ctx.lineWidth = 3; ctx.setLineDash([12, 8]);
@@ -626,9 +636,15 @@ function subtitle() {
   const tracking = ["A", "B"].filter((n) => snap.nodes[n] && snap.nodes[n].has_target && !snap.nodes[n].lost);
   switch (p) {
     case "STANDBY":
+      if (snap.overboard && snap.overboard.enabled) {
+        const ob = snap.overboard;
+        if (!ob.water) return `Water sensor offline (${ob.sensor_status}) — auto-MOB needs it. Manual MOB (key D) still works.`;
+        if (!ob.armed) return "Deck camera looking for the green ball on deck. Auto-MOB arms once it sees it.";
+        return ob.ball_in_view ? "Deck camera tracking the green ball on deck. MOB fires if it disappears and the water sensor gets wet." : "Green ball out of view — MOB fires as soon as the water sensor gets wet.";
+      }
       if (!snap.rail.trigger_enabled) return "Deck camera live, looking for the green ball. Auto-MOB off — start with Manual MOB (key D).";
       return snap.rail.armed ? "Deck camera is watching the rail line. Crew member on deck — trigger armed." : "Deck camera is watching the rail line.";
-    case "OVERBOARD": return (inc.source === "shipcam" ? `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.` : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + (snap.dispatch_on === "confirm" ? " Drone launched, searching the drift area. Rover waits for the drone's sighting to be confirmed." : " Drone and rover launched — drone searching the drift area.");
+    case "OVERBOARD": return (inc.source === "shipcam" ? (inc.detail && inc.detail.trigger === "ball_water" ? `Deck camera lost the green ball and the water sensor went wet at ${fmtTime(inc.mob_capture_ts)}.` : `Deck camera saw a person cross the rail at ${fmtTime(inc.mob_capture_ts)}.`) : `Manual MOB at ${fmtTime(inc.mob_capture_ts)}.`) + (snap.dispatch_on === "confirm" ? " Drone launched, searching the drift area. Rover waits for the drone's sighting to be confirmed." : " Drone and rover launched — drone searching the drift area.");
     case "CANDIDATE": { const c = currentCandidate(); return c ? `Scout ${c.node_id} sees a possible person (${c.reason}). Confirm or reject.` + (snap.dispatch_on === "confirm" && snap.roles && c.node_id === snap.roles.drone && !snap.dispatch ? " Confirming sends the rover." : "") : "Candidate needs a decision."; }
     case "TRACKING": {
       if (!tracking.length) { const la = snap.last_accepted; return `All scouts lost visual — last fix ${fmtAge(t - la.capture_ts)} old, still fresh.`; }

@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.26",
   "websockets>=12",
   "pillow>=10",
+  "pyserial>=3.4",
 ]
 
 [project.optional-dependencies]
