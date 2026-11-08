@@ -8,8 +8,18 @@
 #   scripts/deploy_rover.sh start URL [ARGS] run the client in the background, e.g.
 #        scripts/deploy_rover.sh start ws://169.254.50.2:8000
 #        (pan defaults: servo 1, sign -1, HiwonderSDK.Board:setPWMServoPulse; --pan-call none = body only)
+#   scripts/deploy_rover.sh start           ... with the URLs saved in ~/osprey-rover/rover.env
+#   scripts/deploy_rover.sh urls [ARGS]     save wired + current Cloudflare tunnel URL (asked from
+#        the ground Pi) and ARGS (e.g. "--trace --fps 8") to rover.env; the client tries them in order
+#   scripts/deploy_rover.sh autostart on|off  run the client at boot as osprey-rover.service (on also
+#        disables Hiwonder's start_node container, which holds the motors and camera; off restores it)
 #   scripts/deploy_rover.sh stop            stop the client (SIGTERM; the client stops the wheels)
 #   scripts/deploy_rover.sh status | log
+#
+# Wi-Fi: the venue isolates Wi-Fi clients, so over Wi-Fi the rover reaches the ground through the
+# Cloudflare tunnel (outbound HTTPS). The quick-tunnel URL changes when cloudflared restarts: re-run
+# "urls" (over the cable) after that. Link drops: the rover keeps searching/approaching on its own
+# camera and stops by itself after --autonomy-s (60 s) without the ground.
 #
 # SDK elsewhere than /home/pi/TurboPi: TURBOPI_SDK=<folder on the rover> scripts/deploy_rover.sh ...
 # Host: ROVER_HOST (default pi@169.254.50.3, the TurboPi on the wired switch). Copy your key first:
@@ -21,6 +31,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 HOST="${ROVER_HOST:-pi@169.254.50.3}"
+GROUND="${GROUND_HOST:-mob-pi}"
+WIRED_URL="${WIRED_URL:-ws://169.254.50.2:8000}"
 DIR="osprey-rover"
 SSH=(ssh -o ConnectTimeout=5 "$HOST")
 
@@ -30,6 +42,7 @@ copy() {
   # Pi 5 / ROS 2 image: HiwonderSDK shim over ~/board_demo/ros_robot_controller_sdk.py
   "${SSH[@]}" "mkdir -p ~/$DIR/HiwonderSDK"
   scp -q turbopi/HiwonderSDK/*.py "$HOST:$DIR/HiwonderSDK/"
+  scp -q turbopi/osprey-rover.service "$HOST:$DIR/"
   echo "copied scout_client.py + ballcolor.py to $HOST:~/$DIR"
 }
 
@@ -88,10 +101,43 @@ EOF
   selftest)
     shift
     ssh -t -o ConnectTimeout=5 "$HOST" "$REMOTE_PY; \$PY scout_client.py --selftest --hw hiwonder $*" ;;
+  urls)
+    shift
+    # macOS sometimes routes 169.254/16 over Wi-Fi: retry pinned to the wired port
+    T=$(ssh -o ConnectTimeout=4 "$GROUND" '~/osprey/scripts/tunnel.sh url' 2>/dev/null ||
+        ssh -o ConnectTimeout=4 -o BindInterface=en10 "$GROUND" '~/osprey/scripts/tunnel.sh url' 2>/dev/null || true)
+    T="${T%/scout}"
+    case "$T" in https://*) URLS="$WIRED_URL,$T" ;; *) echo "no tunnel URL from $GROUND (scripts/tunnel.sh start on the Pi?): wired only"; URLS="$WIRED_URL" ;; esac
+    printf 'ROVER_URLS=%s\nROVER_ARGS=%s\n' "$URLS" "$*" | "${SSH[@]}" "cat > ~/$DIR/rover.env"
+    echo "rover.env on $HOST:"; "${SSH[@]}" "cat ~/$DIR/rover.env"
+    "${SSH[@]}" 'systemctl is-active -q osprey-rover 2>/dev/null' && { echo "restarting osprey-rover.service"; "${SSH[@]}" 'sudo systemctl restart osprey-rover'; } || true ;;
+  autostart)
+    case "${2:-}" in
+      on) "${SSH[@]}" 'set -e; cd ~/'"$DIR"'
+            [ -f rover.env ] || { echo "no rover.env: run deploy_rover.sh urls first"; exit 1; }
+            if [ -f rover.pid ] && kill -0 "$(cat rover.pid)" 2>/dev/null; then kill "$(cat rover.pid)"; rm -f rover.pid; fi
+            sudo cp osprey-rover.service /etc/systemd/system/
+            sudo systemctl daemon-reload
+            sudo systemctl disable --now start_node; docker stop turbopi >/dev/null 2>&1 || true
+            sudo systemctl enable --now osprey-rover
+            sleep 3; systemctl --no-pager -n 0 status osprey-rover | head -3; tail -3 rover.log' ;;
+      off) "${SSH[@]}" 'sudo systemctl disable --now osprey-rover 2>/dev/null || true
+            sudo systemctl enable start_node; echo "osprey-rover off; start_node re-enabled (Hiwonder app back after reboot)"' ;;
+      *) echo "usage: deploy_rover.sh autostart on|off"; exit 1 ;;
+    esac ;;
   start)
     shift
-    URL="${1:?usage: deploy_rover.sh start URL [ARGS]}"; shift
+    URL="${1:-}"; [ $# -gt 0 ] && shift
+    if [ -z "$URL" ]; then
+      URL=$("${SSH[@]}" "sed -n 's/^ROVER_URLS=//p' ~/$DIR/rover.env 2>/dev/null")
+      [ -n "$URL" ] || { echo "usage: deploy_rover.sh start URL [ARGS]  (or run: deploy_rover.sh urls)"; exit 1; }
+      echo "URLs from rover.env: $URL"
+    fi
+    if "${SSH[@]}" 'systemctl is-active -q osprey-rover 2>/dev/null'; then
+      echo "osprey-rover.service is running (autostart on): use autostart off first"; exit 1
+    fi
     "${SSH[@]}" "$REMOTE_PY"'
+      docker stop turbopi >/dev/null 2>&1 || true   # Hiwonder container holds the motors + camera
       if [ -f rover.pid ] && kill -0 "$(cat rover.pid)" 2>/dev/null; then
         echo "already running (pid $(cat rover.pid))"; exit 0
       fi
@@ -101,6 +147,7 @@ EOF
       if kill -0 "$(cat rover.pid)" 2>/dev/null; then echo "started (pid $(cat rover.pid))"; tail -5 rover.log
       else echo "exited:"; tail -20 rover.log; exit 1; fi' ;;
   stop)
+    "${SSH[@]}" 'systemctl is-active -q osprey-rover 2>/dev/null && { sudo systemctl stop osprey-rover; echo "stopped osprey-rover.service (starts again at boot: autostart off to disable)"; }' || true
     "${SSH[@]}" 'cd ~/'"$DIR"'
       if [ -f rover.pid ] && kill -0 "$(cat rover.pid)" 2>/dev/null; then
         kill "$(cat rover.pid)"
@@ -109,9 +156,10 @@ EOF
         rm -f rover.pid; echo stopped
       else echo "not running"; fi' ;;
   status)
+    "${SSH[@]}" 'echo "service: $(systemctl is-active osprey-rover 2>/dev/null) / $(systemctl is-enabled osprey-rover 2>/dev/null || echo not-installed)"; echo "wifi: $(nmcli -t -f DEVICE,STATE,CONNECTION device | grep ^wlan0)"; [ -f ~/'"$DIR"'/rover.env ] && sed -n "s/^/env: /p" ~/'"$DIR"'/rover.env'
     "${SSH[@]}" 'cd ~/'"$DIR"'; if [ -f rover.pid ] && kill -0 "$(cat rover.pid)" 2>/dev/null; then echo "running (pid $(cat rover.pid))"; else echo "not running"; fi' ;;
   log)
     "${SSH[@]}" "tail -n 50 -f ~/$DIR/rover.log" ;;
   *)
-    sed -n '2,20p' "$0"; exit 1 ;;
+    sed -n '2,32p' "$0"; exit 1 ;;
 esac

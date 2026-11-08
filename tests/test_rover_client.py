@@ -535,3 +535,63 @@ def test_arrived_chases_a_ball_that_moved_a_little_further(monkeypatch):
     r.on_local([box(0.5, 0.5, 0.28)])        # ~1.25x further away than on arrival
     r.tick()
     assert r.state == "approaching"
+
+
+def test_ws_urls_wired_first_then_tunnel():
+    urls = sc.ws_urls("ws://169.254.50.2:8000, https://abc-def.trycloudflare.com/scout,", "B")
+    assert urls == ["ws://169.254.50.2:8000/ws/scout?node=B",
+                    "wss://abc-def.trycloudflare.com/ws/scout?node=B"]
+
+
+def test_link_loss_keeps_approaching_on_its_own_lock_then_stops_after_the_cap(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.on_link(True)
+    r._set_pan(0.0)
+    r.on_local([box(0.5, 0.5, 0.06)])
+    r.tick()
+    r.on_link(False)                         # Wi-Fi drops
+    for _ in range(10):
+        t[0] += 0.1
+        r.on_local([box(0.5, 0.5, 0.06)])
+        r.tick()
+    assert r.state == "approaching" and hw.cmds[-1][0] > 0      # still closing in
+    t[0] += sc.LINK_AUTONOMY_S
+    r.on_local([box(0.5, 0.5, 0.06)])
+    r.tick()
+    assert r.state == "stopped" and hw.cmds[-1] == "stop"      # nobody could stop it: it stops
+
+
+def test_link_loss_without_a_lock_keeps_searching(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.on_link(True)
+    r.on_link(False)
+    for _ in range(30):
+        t[0] += 0.1
+        r.tick()
+    assert r.state == "searching" and len(set(hw.pans)) > 3     # camera still sweeping
+
+
+def test_link_back_resets_the_cap(monkeypatch):
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.on_link(True)
+    r.on_link(False)
+    t[0] += sc.LINK_AUTONOMY_S - 1
+    r.on_link(True)
+    t[0] += 5
+    r.tick()
+    assert r.state == "searching"
+
+
+def test_stop_wins_at_the_ball_too(monkeypatch):
+    monkeypatch.setattr(sc, "ARRIVE_BOX_H", sc.ARRIVE_BY_TARGET["green"])
+    t = [1000.0]
+    r, hw = _pan_rover(monkeypatch, t)
+    r.on_local([box(0.5, 0.5, 0.4)])
+    r.tick(); r.tick()
+    assert r.state == "arrived"
+    r.on_command({"type": "stop"})
+    assert r.state == "stopped" and hw.cmds[-1] == "stop"

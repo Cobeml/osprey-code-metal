@@ -1,0 +1,23 @@
+# Osprey rover client as a service (installed by: scripts/deploy_rover.sh autostart on).
+# Starts at boot so the rover joins over Wi-Fi without an ssh session. URLs and extra args come
+# from ~/osprey-rover/rover.env (scripts/deploy_rover.sh urls writes it). Hiwonder's own
+# start_node container holds the motor serial port and the camera: autostart on disables it.
+[Unit]
+Description=Osprey rover scout client
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/osprey-rover
+EnvironmentFile=/home/pi/osprey-rover/rover.env
+ExecStartPre=-/usr/bin/docker stop turbopi
+ExecStart=/bin/bash -c 'exec /usr/bin/python3 -u scout_client.py "$ROVER_URLS" --hw hiwonder $ROVER_ARGS'
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+StandardOutput=append:/home/pi/osprey-rover/rover.log
+StandardError=append:/home/pi/osprey-rover/rover.log
+
+[Install]
+WantedBy=multi-user.target

@@ -141,6 +141,11 @@ SEARCH_SPIN_LAG_S = 0.15  # motors take this long to get going from standstill
 SEARCH_SPIN_S = SEARCH_SPIN_DEG / SEARCH_SPIN_DEG_PER_S + SEARCH_SPIN_LAG_S   # ~0.6 s; --spin-s overrides
 ARRIVED_BODY_DEG = 20.0   # (unused since the body alone steers at the ball)
 ARRIVED_HOLD_ERR = 0.1    # at the ball: hold still while it is within this of centre
+# link loss (Wi-Fi drop): camera, lock, search and approach all run on the rover, so it carries on.
+# But a coordinator "stop" cannot reach it then: after this long without the ground it stops and
+# holds (--autonomy-s; 0 = stop at once, the old behaviour).
+LINK_AUTONOMY_S = 60.0
+MOVING_STATES = ("turning", "driving", "searching", "approaching", "arrived")
 
 
 class NoHardware:
@@ -337,6 +342,8 @@ class Rover:
         self.half_sweeps = 0
         self.spin_until = 0.0
         self.inplace_since = None  # when the current turn-in-place began (stall boost)
+        self.link_up = False
+        self.link_lost_at = None   # when the ground link last dropped (None: never connected)
         self.last_tick = None
 
     # ----------------------------------------------------------- pan camera
@@ -531,12 +538,30 @@ class Rover:
             self.follow, self.follow_ts = m, time.time()
         elif t == "stop":
             self.follow = None
-            if self.state in ("approaching", "searching", "driving", "turning"):
+            if self.state in MOVING_STATES:   # stop wins, at the ball too
                 self.hw.stop()
                 self.set("stopped")
 
+    def on_link(self, up: bool, now: float = None) -> None:
+        now = time.time() if now is None else now
+        if up:
+            self.link_up, self.link_lost_at = True, None
+        elif self.link_up or self.link_lost_at is None:
+            self.link_up, self.link_lost_at = False, now
+            if self.state in MOVING_STATES:
+                print(f"ground link lost while {self.state}: carrying on alone "
+                      f"(stops after {LINK_AUTONOMY_S:.0f} s without the link)", flush=True)
+
     # ----------------------------------------------------------- control
     def tick(self) -> None:
+        now = time.time()
+        if not self.link_up and self.link_lost_at is not None and self.state in MOVING_STATES \
+                and now - self.link_lost_at >= LINK_AUTONOMY_S:
+            self.hw.stop()                    # nobody can stop it now: stop and hold
+            self.follow = None
+            print(f"no ground link for {now - self.link_lost_at:.0f} s: stopped", flush=True)
+            self.set("stopped")
+            return
         self._tick()
         if TRACE:
             g = self.local if self.guide_src == "onboard" else self.follow if self.guide_src else None
@@ -707,8 +732,27 @@ def probe() -> None:
 ROTATE_CODES = {90: "ROTATE_90_CLOCKWISE", 180: "ROTATE_180", 270: "ROTATE_90_COUNTERCLOCKWISE"}
 
 
+def ws_urls(url: str, node: str) -> list:
+    """Comma-separated server URLs, tried in order (wired first, then e.g. the Cloudflare tunnel
+    over Wi-Fi). http(s) and ws(s) both work; /ws/scout?node=X is appended."""
+    out = []
+    for u in url.split(","):
+        u = u.strip().rstrip("/")
+        if not u:
+            continue
+        if u.endswith("/scout"):          # tunnel.sh prints .../scout (the phone page)
+            u = u[: -len("/scout")]
+        u = u.replace("https://", "wss://").replace("http://", "ws://")
+        out.append(u + f"/ws/scout?node={node}")
+    return out
+
+
+CONNECT_TIMEOUT_S = 4.0   # give up on one URL quickly and try the next
+VISION_PERIOD_S = 0.1     # onboard detection rate, independent of the video sent
+
+
 async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
-              onboard: str = "green", rotate: int = 0):
+              onboard: str = "green", rotate: int = 0, jpeg_q: int = 70):
     import cv2
     import websockets
 
@@ -759,13 +803,39 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
             res = ballcolor.find_balls(frame)
             rover.on_local(res.get("greens", res["target"]), len(res["decoys"]))
         return ok, frame
+    shown = {"frame": None, "ts": 0.0, "n": 0}   # newest processed frame, for the ground
+
+    async def vision():
+        """Camera + onboard lock, link or no link (~10 Hz, as the controller was tuned)."""
+        while True:
+            t0 = time.time()
+            ok, frame = await _in_thread(grab)
+            if ok:
+                shown["frame"], shown["ts"], shown["n"] = frame, time.time() * 1000, shown["n"] + 1
+            await asyncio.sleep(max(0.0, VISION_PERIOD_S - (time.time() - t0)) if ok else 0.2)
+
+    async def control():
+        while True:
+            rover.tick()
+            del outbox[:-20]   # link down: keep only the newest reports
+            await asyncio.sleep(0.1)
+
+    background = [asyncio.create_task(vision()), asyncio.create_task(control())]  # noqa: F841
     session = "turbopi-" + uuid.uuid4().hex[:6]
     seq = 0
-    ws_url = url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + f"/ws/scout?node={node}"
+    urls = ws_urls(url, node)
+    if not urls:
+        raise SystemExit("no server URL")
+    k = 0
+    period = 1.0 / fps
     while True:
+        ws_url = urls[k % len(urls)]
         try:
-            async with websockets.connect(ws_url, max_size=None, ping_interval=5) as ws:
-                print("connected", ws_url)
+            async with websockets.connect(ws_url, max_size=None, ping_interval=5,
+                                          open_timeout=CONNECT_TIMEOUT_S) as ws:
+                print("connected", ws_url, flush=True)
+                rover.on_link(True)
+                rover.report(rover.state)   # tell the ground where the rover got to meanwhile
 
                 async def receiver():
                     async for msg in ws:
@@ -780,43 +850,49 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
                         await ws.send(json.dumps({"ping": time.time() * 1000}))
                         await asyncio.sleep(1.0)
 
-                async def control():
+                async def sender():
+                    nonlocal seq
+                    sent_n, last_t = 0, 0.0
                     while True:
-                        rover.tick()
                         while outbox:
                             await ws.send(json.dumps(outbox.pop(0)))
-                        await asyncio.sleep(0.1)
+                        if shown["n"] != sent_n and time.time() - last_t >= period:
+                            sent_n, last_t = shown["n"], time.time()
+                            frame, ts = shown["frame"], shown["ts"]
+                            h, w = frame.shape[:2]
+                            ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_q])
+                            if ok:
+                                seq += 1
+                                hdr = json.dumps({"node_id": node, "session_id": session, "seq": seq,
+                                                  "capture_ts_ms": ts, "width": w, "height": h}).encode()
+                                await ws.send(struct.pack("<I", len(hdr)) + hdr + jpg.tobytes())
+                        await asyncio.sleep(0.03)
 
-                tasks = [asyncio.create_task(receiver()), asyncio.create_task(pinger()),
-                         asyncio.create_task(control())]
-                period = 1.0 / fps
+                tasks = [asyncio.create_task(c()) for c in (receiver, pinger, sender)]
                 try:
-                    while True:
-                        t0 = time.time()
-                        ok, frame = await _in_thread(grab)
-                        if not ok:
-                            await asyncio.sleep(0.2)
-                            continue
-                        ts = time.time() * 1000
-                        h, w = frame.shape[:2]
-                        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                        seq += 1
-                        hdr = json.dumps({"node_id": node, "session_id": session, "seq": seq,
-                                          "capture_ts_ms": ts, "width": w, "height": h}).encode()
-                        await ws.send(struct.pack("<I", len(hdr)) + hdr + jpg.tobytes())
-                        await asyncio.sleep(max(0.0, period - (time.time() - t0)))
+                    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for t in done:
+                        if t.exception():
+                            raise t.exception()
+                    raise ConnectionError("connection closed")
                 finally:
                     for t in tasks:
                         t.cancel()
         except Exception as e:  # noqa: BLE001
-            hw.stop()  # never keep driving without the ground link
-            print("link error:", e, "- retrying in 1 s")
+            # the rover keeps searching/approaching on its own camera (control() above), and
+            # stops by itself after LINK_AUTONOMY_S without the ground
+            rover.on_link(False)
+            if LINK_AUTONOMY_S <= 0:
+                hw.stop()
+            k += 1     # next URL (wired -> tunnel -> wired ...)
+            nxt = urls[k % len(urls)]
+            print(f"link error on {ws_url}: {e} - trying {nxt} in 1 s", flush=True)
             await asyncio.sleep(1.0)
-
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("url", nargs="?")
+    ap.add_argument("url", nargs="?", help="server URL, or several comma-separated, tried in order: "
+                    "ws://169.254.50.2:8000,https://xxx.trycloudflare.com")
     ap.add_argument("--node", default="B")
     ap.add_argument("--camera", type=int, default=0)
     # venue TurboPi: camera remounted upright (landscape) at 03:40; 270 undoes a 90 deg clockwise mount
@@ -841,10 +917,16 @@ def main():
                     help="body turn between camera sweeps while searching (timed, no encoders)")
     ap.add_argument("--spin-s", type=float, default=0.0,
                     help="override: spin duration in seconds (0 = from --spin-deg and the measured rate)")
+    ap.add_argument("--autonomy-s", type=float, default=LINK_AUTONOMY_S,
+                    help="keep searching/approaching this long after the ground link drops, then stop "
+                         "(0 = stop at once)")
+    ap.add_argument("--fps", type=float, default=10.0, help="video sent to the ground (Wi-Fi/tunnel: try 6-8)")
+    ap.add_argument("--jpeg-q", type=int, default=70, help="JPEG quality of the video sent (tunnel: try 55)")
     ap.add_argument("--trace", action="store_true", help="log every control tick and lock decision")
     ap.add_argument("--pan-sign", type=float, default=-1.0, choices=[1.0, -1.0])
     a = ap.parse_args()
     global TRACE, SEARCH_SPIN_S
+    globals()["LINK_AUTONOMY_S"] = a.autonomy_s
     TRACE = TRACE or a.trace
     SEARCH_SPIN_S = a.spin_s if a.spin_s > 0 else a.spin_deg / SEARCH_SPIN_DEG_PER_S + SEARCH_SPIN_LAG_S
     print(f"search spin: {SEARCH_SPIN_S:.2f} s at turn {SEARCH_SPIN_TURN} (~{a.spin_deg:.0f} deg)")
@@ -873,7 +955,8 @@ def main():
     if not a.url:
         ap.error("url is required unless --selftest")
     try:
-        asyncio.run(run(a.url, a.camera, hw, a.node, onboard=a.onboard, rotate=a.rotate))
+        asyncio.run(run(a.url, a.camera, hw, a.node, fps=a.fps, onboard=a.onboard, rotate=a.rotate,
+                        jpeg_q=a.jpeg_q))
     finally:
         hw.stop()
 

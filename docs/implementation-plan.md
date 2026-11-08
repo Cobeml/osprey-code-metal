@@ -183,6 +183,27 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - [ ] `docs/results.md`: measured trigger latency, acquisition time, fps per feed, latency, outage recovery, with device and software versions.
 - [ ] README quickstart (exact commands). A clean-checkout rehearsal from the Mac. Ask the user to push.
 
+### Phase 9 — Rover over Wi-Fi (Nov 8) [user: Wi-Fi credentials typed on the rover]
+- [x] Rover autonomy on link loss: camera, lock, search and approach run on the rover whatever the link does; the rover stops by itself after `--autonomy-s` (60 s) without the ground, since a coordinator stop cannot reach it then. Verified on the rover with `--hw none` against a fake ground (link drop, carry on, cap, reconnect).
+- [x] URL failover: `ROVER_URLS` wired first, then the Cloudflare tunnel (`deploy_rover.sh urls`); `--fps` / `--jpeg-q` for a thin link.
+- [x] `turbopi/osprey-rover.service` + `deploy_rover.sh autostart on|off` (on disables Hiwonder's `start_node`, which holds the motors and camera). Not enabled yet: needs the user's OK.
+- [ ] Rover wlan0 from its own hotspot (`hiwonder-ap`) to a network with internet (venue Wi-Fi, phone hotspot or a travel router); the user types the password.
+- [ ] Test: unplug the rover's Ethernet mid-incident; it fails over to the tunnel within a few seconds and keeps going. Measure video fps and command latency over the tunnel.
+- Risk: the quick-tunnel URL changes when cloudflared restarts (Pi reboots). Re-run `deploy_rover.sh urls` over the cable, or use a named tunnel / travel router (stable address).
+
+### Phase 10 — UWB range beacon on the ball (next) [2× Qorvo DWM3001CDK]
+Real MOB beacons are worn by the person, so: one board on the ball ("the person's beacon"), one on the rover (USB to the rover Pi). UWB two-way ranging gives distance only (~10 cm, tens of Hz, no angle: one antenna each). The rover's camera already gives the angle, so camera + range = a real 2D fix; range alone still helps when the ball is out of view.
+- [ ] Identify the firmware: plug a board into the Mac, read the banner on `/dev/cu.usbmodem*` at 115200. Qorvo's CLI firmware ranges with `INITF` (rover, initiator) / `RESPF` (ball, responder). If it ships with the Nearby Interaction demo instead, reflashing needs J-Link / nRF tools (ask before installing).
+- [ ] Ball side: board + small USB power bank, `RESPF` at power-up (saved config if the firmware allows, else a boot script on a tiny host).
+- [ ] Rover side: `turbopi/uwb.py` reads ranges from `/dev/ttyACM0` in a thread (newest value + timestamp, median of the last 5, stale after 0.5 s). Unit-test the parser against captured lines.
+- [ ] Use it in `scout_client.py` behind `--uwb` (off by default, today's behaviour unchanged):
+  - run-out distance = UWB range instead of the 1.5 m default;
+  - arrival = range ≤ 0.4 m (with the box as a cross-check);
+  - lock check: a green blob whose box-size distance disagrees with UWB range by > 50 % is a decoy;
+  - lost from view: drive short legs and keep the heading that makes the range shrink (gradient search), then camera sweep as now.
+- [ ] Report `uwb_range_m` with rover state; dashboard shows "UWB range 1.23 m · real (Qorvo DWM3001C)" on Rover B's tile and a range ring around the rover on the chart.
+- [ ] Later: board with the phone operator for phone↔rover range (triangulation with the phone's bearing to the ball).
+
 ### Stretch (only after Phase 8 rehearses cleanly)
 - S1 Grove button on D2 → `/api/commands manual_mob` via a small Seeeduino sketch (`arduino-cli` on the Pi) and a serial reader.
 - S2 ESP-NOW mirror of compact observations between the two XIAO ESP32-C5s (≤ 250 B packets), shown as a "radio link" status. Needs a data cable.
