@@ -1,7 +1,8 @@
 """Green target vs red decoy classification (ground and rover share perception/ballcolor.py)."""
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2")  # the Mac venv has no OpenCV; these run on the Pi
 
 from osprey.perception import ballcolor
 from osprey.perception.targets import detect_targets, is_target, merge

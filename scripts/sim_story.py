@@ -54,8 +54,7 @@ def main():
     s, dt = wait(lambda s: s["phase"] == "TRACKING", 3, "tracking")
     rows.append(("confirm -> TRACKING", dt, a["message"]))
     rover = s.get("roles", {}).get("rover", "B")
-    a = cmd("dispatch")
-    rows.append(("dispatch rover", 0.0, a["message"]))
+    # the rover launches with the drone at MOB and receives the drone's fix on confirm
     s, dt = wait(lambda s: all(s["nodes"][n]["has_target"] for n in ("A", "B")), 15, "rover auto-associates")
     rows.append(("rover found target, auto-associated", dt, "<= 50 m rule"))
     cmd("demo_hide", hidden=True)
