@@ -820,6 +820,9 @@ def ws_urls(url: str, node: str) -> list:
 
 
 CONNECT_TIMEOUT_S = 4.0   # give up on one URL quickly and try the next
+LINK_DEAD_S = 4.0         # no reply from the ground this long (it pongs every 1 s): drop the link.
+                          # The library keepalive can sit behind sends blocked on a pulled cable
+                          # for minutes (seen: 220 s), so the rover watches replies itself.
 VISION_PERIOD_S = 0.1     # onboard detection rate, independent of the video sent
 
 
@@ -914,8 +917,11 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
                 rover.on_link(True)
                 rover.report(rover.state)   # tell the ground where the rover got to meanwhile
 
+                last_rx = [time.time()]
+
                 async def receiver():
                     async for msg in ws:
+                        last_rx[0] = time.time()
                         m = json.loads(msg)
                         if "pong" in m:
                             await ws.send(json.dumps({"sync": m["pong"], "srv": m["srv"], "recv": time.time() * 1000}))
@@ -945,7 +951,12 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
                                 await ws.send(struct.pack("<I", len(hdr)) + hdr + jpg.tobytes())
                         await asyncio.sleep(0.03)
 
-                tasks = [asyncio.create_task(c()) for c in (receiver, pinger, sender)]
+                async def watchdog():
+                    while time.time() - last_rx[0] < LINK_DEAD_S:
+                        await asyncio.sleep(0.5)
+                    raise ConnectionError(f"no reply from the ground for {LINK_DEAD_S:.0f} s")
+
+                tasks = [asyncio.create_task(c()) for c in (receiver, pinger, sender, watchdog)]
                 try:
                     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                     for t in done:
@@ -955,6 +966,11 @@ async def run(url: str, cam_index: int, hw, node: str = "B", fps: float = 10.0,
                 finally:
                     for t in tasks:
                         t.cancel()
+                    if time.time() - last_rx[0] >= LINK_DEAD_S:
+                        # dead link: drop the socket now; a close handshake would wait on it
+                        tr = getattr(ws, "transport", None)
+                        if tr is not None:
+                            tr.abort()
         except Exception as e:  # noqa: BLE001
             # the rover keeps searching/approaching on its own camera (control() above), and
             # stops by itself after LINK_AUTONOMY_S without the ground

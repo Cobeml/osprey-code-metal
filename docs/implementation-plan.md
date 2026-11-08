@@ -187,8 +187,8 @@ Rough budget ≈ 15 h of build plus rehearsal. Hardware dependency in brackets.
 - [x] Rover autonomy on link loss: camera, lock, search and approach run on the rover whatever the link does; the rover stops by itself after `--autonomy-s` (60 s) without the ground, since a coordinator stop cannot reach it then. Verified on the rover with `--hw none` against a fake ground (link drop, carry on, cap, reconnect).
 - [x] URL failover: `ROVER_URLS` wired first, then the Cloudflare tunnel (`deploy_rover.sh urls`); `--fps` / `--jpeg-q` for a thin link.
 - [x] `turbopi/osprey-rover.service` + `deploy_rover.sh autostart on|off` (on disables Hiwonder's `start_node`, which holds the motors and camera). Not enabled yet: needs the user's OK.
-- [ ] Rover wlan0 from its own hotspot (`hiwonder-ap`) to a network with internet (venue Wi-Fi, phone hotspot or a travel router); the user types the password.
-- [ ] Test: unplug the rover's Ethernet mid-incident; it fails over to the tunnel within a few seconds and keeps going. Measure video fps and command latency over the tunnel.
+- [x] Rover wlan0 from its own hotspot (`hiwonder-ap`) to a network with internet: on `BASE-X Guest` (10.1.200.114). Caveat: Hiwonder's `wifi.service` (`~/hiwonder-toolbox/wifi.py`, `WIFI_MODE = 1`) deletes every Wi-Fi profile and brings its hotspot back at boot, so a rover reboot drops the venue Wi-Fi.
+- [x] Test (motors off): unplug the rover's Ethernet. First try: stuck on the dead wired socket ~220 s (library keepalive blocked behind sends). Fix: `LINK_DEAD_S` = 4 s watchdog on replies from the ground, then abort the socket. Retest: failover in ~6 s; tunnel 6.5 fps, 60-77 ms (wired 7.5-8 fps, 35-70 ms).
 - Risk: the quick-tunnel URL changes when cloudflared restarts (Pi reboots). Re-run `deploy_rover.sh urls` over the cable, or use a named tunnel / travel router (stable address).
 
 ### Phase 10 — UWB range beacon on the ball (next) [2× Qorvo DWM3001CDK]
