@@ -43,11 +43,10 @@ class Settings:
     label_ship: str = "SHIP DECK CAM"
     label_A: str = "SCOUT A · FPV drone (pilot flown)"
     label_B: str = "SCOUT B · TurboPi rover (ground stand-in)"
-    # "person" everywhere for the live demo; "ball" = green target / red decoy classifier
-    target_ship: str = "person"
-    target_A: str = "person"
-    target_B: str = "person"
-    target_label: str = "person (in the water)"
+    target_ship: str = "person+ball"
+    target_A: str = "ball"
+    target_B: str = "ball"
+    target_label: str = "green ball (stand-in for the person in the water)"
     green_hsv_lo: tuple = (35, 80, 50)
     green_hsv_hi: tuple = (85, 255, 255)
     # red decoy ball: red wraps around hue 0 in OpenCV HSV, so two (lo, hi) bands

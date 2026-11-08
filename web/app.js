@@ -172,19 +172,81 @@ renderTimeline();
 
 // ------------------------------------------------------------------ chart
 const map = L.map("chart", { zoomControl: true, attributionControl: true }).setView([42.35, -70.8], 17);
-// Esri Light Gray canvas: keyless, minimal, so the markers carry the picture
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-  { maxZoom: 20, maxNativeZoom: 16, attribution: "Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors" }).addTo(map);
-L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
+// Esri Ocean basemap (keyless, bathymetry shading). The chart's own sea-blue background stands in
+// when the venue has no internet, so it still reads as water.
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 20, maxNativeZoom: 13, attribution: "Tiles © Esri — GEBCO, NOAA, Garmin, HERE" }).addTo(map);
+L.control.scale({ imperial: true, metric: true, position: "bottomright" }).addTo(map);
+
+// ---- nautical furniture: lat/lon graticule with degree-minute labels, compass rose
+const grid = L.layerGroup().addTo(map);
+const GRID_STEPS_MIN = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60];
+function dm(v, pos, neg) {
+  const h = v >= 0 ? pos : neg, a = Math.abs(v), d = Math.floor(a + 1e-9);
+  return `${d}°${((a - d) * 60).toFixed(2).padStart(5, "0")}′${h}`;
+}
+function drawGrid() {
+  grid.clearLayers();
+  const b = map.getBounds(), spanMin = (b.getNorth() - b.getSouth()) * 60;
+  const step = (GRID_STEPS_MIN.find((s) => spanMin / s <= 5) || 60) / 60;
+  const line = { color: "#ffffff", weight: 1, opacity: 0.45, interactive: false };
+  const lab = (html, cls) => L.divIcon({ className: "grid-lab " + cls, html, iconSize: null });
+  for (let y = Math.ceil(b.getSouth() / step) * step; y < b.getNorth(); y += step) {
+    grid.addLayer(L.polyline([[y, b.getWest()], [y, b.getEast()]], line));
+    grid.addLayer(L.marker([y, b.getWest()], { icon: lab(dm(y, "N", "S"), "lat"), interactive: false, keyboard: false }));
+  }
+  for (let x = Math.ceil(b.getWest() / step) * step; x < b.getEast(); x += step) {
+    grid.addLayer(L.polyline([[b.getSouth(), x], [b.getNorth(), x]], line));
+    grid.addLayer(L.marker([b.getNorth(), x], { icon: lab(dm(x, "E", "W"), "lon"), interactive: false, keyboard: false }));
+  }
+}
+map.on("moveend zoomend resize", drawGrid);
+const Rose = L.Control.extend({
+  onAdd() {
+    const d = L.DomUtil.create("div", "compass-rose");
+    d.innerHTML = `<svg viewBox="-50 -50 100 100" aria-label="Compass rose, north up">
+      <circle r="44" class="r-ring"/><circle r="34" class="r-ring thin"/>
+      ${[...Array(36).keys()].map((i) => `<line class="r-tick" y1="-44" y2="${i % 9 === 0 ? -36 : -40}" transform="rotate(${i * 10})"/>`).join("")}
+      <path class="r-pt" d="M0-42 L6 0 L0 6 L-6 0Z"/><path class="r-pt dim" d="M0 42 L6 0 L0-6 L-6 0Z"/>
+      <path class="r-pt dim" d="M42 0 L0 5 L-6 0 L0-5Z"/><path class="r-pt dim" d="M-42 0 L0 5 L6 0 L0-5Z"/>
+      <text y="-28" class="r-n">N</text></svg>`;
+    return d;
+  },
+});
+new Rose({ position: "bottomright" }).addTo(map);
+
+// ---- moving things glide between updates instead of jumping
+function glide(marker, to, ms = 900) {
+  const from = marker.getLatLng();
+  if (!marker._map || (from.lat === 0 && from.lng === 0) || from.distanceTo(to) > 2000) { marker.setLatLng(to); return; }
+  const t0 = performance.now(), [ty, tx] = to;
+  cancelAnimationFrame(marker._glide);
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / ms), e = k * (2 - k);
+    marker.setLatLng([from.lat + (ty - from.lat) * e, from.lng + (tx - from.lng) * e]);
+    if (k < 1) marker._glide = requestAnimationFrame(step);
+  };
+  marker._glide = requestAnimationFrame(step);
+}
+const SHIP_SVG = (hdg) => `<div class="ship-ic" style="transform:rotate(${hdg}deg)"><svg viewBox="-12 -22 24 44">
+  <path class="wake" d="M-5 16 L-11 40 M5 16 L11 40"/><path class="hull" d="M0-20 C7-10 8 4 6 16 L-6 16 C-8 4 -7-10 0-20Z"/>
+  <rect class="bridge" x="-3.5" y="4" width="7" height="6" rx="1"/></svg></div>`;
 const SIM = '<span class="badge">SIM</span>';
 const layers = {
-  hull90: L.polygon([], { color: "#f79009", weight: 1.5, fillColor: "#f79009", fillOpacity: 0.08, dashArray: "5 5" }).addTo(map),
-  hull50: L.polygon([], { color: "#f79009", weight: 2, fillColor: "#f79009", fillOpacity: 0.18 }).addTo(map),
-  ship: L.circleMarker([0, 0], { radius: 9, color: "#fff", fillColor: "#0b3d91", fillOpacity: 1, weight: 3 }).addTo(map)
-    .bindTooltip("Ship " + SIM, { permanent: true, direction: "right", className: "mk-label", offset: [10, 0] }),
+  hull90: L.polygon([], { color: "#f79009", weight: 1.5, fillColor: "#fdb022", fillOpacity: 0.14, dashArray: "5 5" }).addTo(map),
+  hull50: L.polygon([], { color: "#f79009", weight: 2, fillColor: "#fdb022", fillOpacity: 0.3 }).addTo(map),
+  ship: L.marker([0, 0], { icon: L.divIcon({ className: "", html: SHIP_SVG(0), iconSize: [24, 44], iconAnchor: [12, 22] }), keyboard: false }).addTo(map)
+    .bindTooltip("Ship " + SIM, { permanent: true, direction: "right", className: "mk-label", offset: [14, 0] }),
   mob: L.marker([0, 0], { icon: L.divIcon({ className: "", html: '<div class="mob-x">✕</div>' }) }),
+  // drift set: seed -> current centre of the particle cloud (the model's own motion, not decoration)
+  set: L.polyline([], { color: "#7a2e0e", weight: 2.5, opacity: 0.9, dashArray: "2 6", className: "set-line", interactive: false }).addTo(map),
+  setHead: L.marker([0, 0], { icon: L.divIcon({ className: "", html: '<div class="set-head">➤</div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }),
+  trails: { A: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map),
+            B: L.polyline([], { weight: 2, opacity: 0.5, dashArray: "1 5", interactive: false }).addTo(map) },
   sight: {}, cand: {},
 };
+const trailPts = { A: [], B: [] };
+let shipHdg = null;
 let mapCentered = false, lastIncident = null, userMovedAt = 0;
 map.on("dragstart zoomstart", (e) => { if (!autoFitting) userMovedAt = Date.now(); });
 let autoFitting = false;
@@ -221,11 +283,25 @@ function animateCollapse(t) {
   else { collapse = null; setLatLngs(layers.hull90, null); setLatLngs(layers.hull50, null); }
 }
 
+function drawSet(seed, cen) {
+  if (!seed || !cen || L.latLng(seed).distanceTo(cen) < 3) { layers.set.setLatLngs([]); layers.setHead.remove(); return; }
+  layers.set.setLatLngs([seed, cen]);
+  const p1 = map.latLngToLayerPoint(seed), p2 = map.latLngToLayerPoint(cen);
+  const deg = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+  layers.setHead.setLatLng(cen).addTo(map);
+  const el = layers.setHead.getElement() && layers.setHead.getElement().firstChild;
+  if (el) el.style.transform = `rotate(${deg}deg)`;
+}
+
 function renderChart() {
   if (!snap) return;
   const t = nowS();
   const ship = [snap.ship.lat, snap.ship.lon];
   layers.ship.setLatLng(ship);
+  if (shipHdg !== snap.ship.heading) {
+    shipHdg = snap.ship.heading;
+    layers.ship.setIcon(L.divIcon({ className: "", html: SHIP_SVG(shipHdg || 0), iconSize: [24, 44], iconAnchor: [12, 22] }));
+  }
   if (!mapCentered) { map.setView(ship, 17); mapCentered = true; }
   const inc = snap.incident;
   if (inc && inc.mob_location) {
@@ -241,12 +317,14 @@ function renderChart() {
 
   const d = snap.drift;
   const lab = $("#estimate-label");
+  if (!d) drawSet(null);
   if (d) {
     collapse = null;
     clearTimeout(fixLabelTimer); fixLabelTimer = null;
     lastHulls = { h50: d.hull50, h90: d.hull90 };
     setLatLngs(layers.hull90, d.hull90);
     setLatLngs(layers.hull50, d.hull50);
+    drawSet(d.seed, d.centroid);
     lab.classList.remove("hidden");
     lab.innerHTML = `<h4>Drift search area <span class="badge">ESTIMATE</span></h4><dl>` +
       `<dt>Model</dt><dd>${d.model}</dd><dt>Forcing</dt><dd>${d.forcing}</dd>` +
@@ -283,10 +361,16 @@ function renderChart() {
         m = layers.sight[n] = L.circleMarker([0, 0], { radius: 8, weight: 3 }).addTo(map)
           .bindTooltip("", { permanent: true, direction: dir, className: "mk-label", offset: [0, dir === "top" ? -10 : 10] });
       }
-      m.setLatLng([la.location.lat, la.location.lon]);
+      glide(m, [la.location.lat, la.location.lon]);
+      const tp = trailPts[n], last = tp[tp.length - 1];
+      if (!last || last[0] !== la.location.lat || last[1] !== la.location.lon) {
+        tp.push([la.location.lat, la.location.lon]); if (tp.length > 24) tp.shift();
+      }
+      layers.trails[n].setLatLngs(tp).setStyle({ color: NODE_COLORS[n] });
       m.setStyle({ color: fresh ? "#fff" : NODE_COLORS[n], fillColor: fresh ? NODE_COLORS[n] : "#fff", fillOpacity: 1, dashArray: fresh ? null : "3 3" });
       m.setTooltipContent(`${n} · last sighting ${fmtAge(age)}${fresh ? "" : " (stale)"} ${SIM}`);
     } else if (m) { m.remove(); delete layers.sight[n]; }
+    if (!(la && la.location) && trailPts[n].length) { trailPts[n] = []; layers.trails[n].setLatLngs([]); }
   }
   const cands = allCandidates();
   const keep = new Set(cands.map((c) => c.candidate_id));
@@ -299,7 +383,7 @@ function renderChart() {
         .bindTooltip("", { permanent: true, direction: "bottom", className: "mk-label cand", offset: [0, 12] });
       m.on("click", () => { selectedCandidate = c.candidate_id; toast("Selected candidate on " + c.node_id); });
     }
-    m.setLatLng([c.location.lat, c.location.lon]);
+    glide(m, [c.location.lat, c.location.lon]);
     m.setTooltipContent(`CANDIDATE ${c.node_id}${c.distance_m != null ? " · " + c.distance_m.toFixed(0) + " m" : ""}`);
   }
 }
@@ -313,6 +397,18 @@ function fitRect(cv, img) {
 const BOX_COLORS = { tracking: "#32d583", candidate: "#f97066", detection: "#98a2b3", person: "#fdb022", ball: "#32d583",
   decoy: "#b42318", "ball?": "#98a2b3" };
 const CANVAS_FONT = "Inter, -apple-system, sans-serif";
+const CLS_NAME = { green: "green ball", red: "red ball", ball: "ball", person: "person" };
+
+// every box says what it is (colour) and, on the scouts, where it is in the workflow
+function boxLabel(b) {
+  const what = CLS_NAME[b.cls] || "";
+  const dist = b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : "";
+  if (b.state === "decoy") return "red ball · decoy";
+  if (b.state === "ball?") return "ball · colour?";
+  if (b.state === "person") return "person" + dist;
+  if (b.state === "ball") return (what || "ball") + dist;
+  return `${what ? what + " · " : ""}${b.state} ${Math.round(b.confidence * 100)}%`;
+}
 
 function drawBoxes(ctx, fit, header, dim) {
   for (const b of header.boxes) {
@@ -324,8 +420,7 @@ function drawBoxes(ctx, fit, header, dim) {
     ctx.lineWidth = sel ? 5 : 3;
     ctx.globalAlpha = dim ? 0.6 : 1;
     ctx.beginPath(); ctx.roundRect(bx, by, (x2 - x1) * fit.w, (y2 - y1) * fit.h, 6); ctx.stroke();
-    const lbl = (b.state === "person" || b.state === "ball") ? `${b.state}${b.z_m != null ? " " + b.z_m.toFixed(2) + " m" : ""}`
-      : b.state === "decoy" ? "red · decoy" : `${b.state} ${Math.round(b.confidence * 100)}%`;
+    const lbl = boxLabel(b);
     ctx.font = `700 17px ${CANVAS_FONT}`;
     const tw = ctx.measureText(lbl).width, ly = Math.max(0, by - 26);
     ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(bx - 1.5, ly, tw + 14, 24, 5); ctx.fill();
@@ -407,7 +502,7 @@ function renderFeeds() {
         ctx.textAlign = "start";
       }
       const seen = ns && ns.last_accepted ? ns.last_accepted.capture_ts : f.liveHeader ? f.liveHeader.capture_ts : null;
-      ageText = seen ? `${ns && ns.last_accepted ? "person" : "video"} last seen ${fmtAge(t - seen)} ago` : "";
+      ageText = seen ? `${ns && ns.last_accepted ? (ns.target === "ball" ? "green ball" : "person") : "video"} last seen ${fmtAge(t - seen)} ago` : "";
     }
     tile.querySelector(".age").textContent = ageText;
   }

@@ -12,10 +12,10 @@ Dispatch flow (rover starts beside the deck camera, facing along its optical axi
   toward the box and creep forward until the box is big enough -> "arrived" (stop).
   Every state change is reported as {"type":"rover_state","state":...,"onboard":{...}}.
 
-Onboard check (--onboard): "person" (default) runs OpenCV's HOG people detector on the rover's
-own Pi (no Hailo there); "green" runs the ground's green/red ball classifier
-(src/osprey/perception/ballcolor.py; copy it next to this file or run from the repo); "none"
-means ground guidance only. While the link is up but the ground has no fresh follow error, the
+Onboard check (--onboard): "green" (default) runs the ground's green/red ball classifier
+(src/osprey/perception/ballcolor.py; copy it next to this file or run from the repo); "person"
+runs OpenCV's HOG people detector on the rover's own Pi (no Hailo there); "none" means ground
+guidance only. While the link is up but the ground has no fresh follow error, the
 rover steers on its own onboard sighting (red balls never steer it). Ground follow errors take
 priority, stop always wins, and the rover still stops if the link drops.
 
@@ -356,7 +356,7 @@ def main():
     ap.add_argument("--node", default="B")
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--hw", default="none", choices=["none", "hiwonder"])
-    ap.add_argument("--onboard", default="person", choices=["person", "green", "none"])
+    ap.add_argument("--onboard", default="green", choices=["person", "green", "none"])
     a = ap.parse_args()
     hw = HiwonderHardware() if a.hw == "hiwonder" else NoHardware()
     asyncio.run(run(a.url, a.camera, hw, a.node, onboard=a.onboard))
