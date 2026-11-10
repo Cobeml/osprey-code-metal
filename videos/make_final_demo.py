@@ -32,7 +32,7 @@ WEB = HERE / "osprey-final-demo-web.mp4"
 COLD_OPEN = HERE / "osprey-hype.mp4"   # make_hype.py; 9.6 s cold open ahead of the main cut
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REG = "/System/Library/Fonts/Supplemental/Arial.ttf"
-VOICE, SPEED = "am_fenrir", 1.12   # Kokoro voice (tts.py)
+VOICE, SPEED = "am_michael", 1.12   # Kokoro voice (tts.py)
 W, H, FPS = 1920, 1080, 30
 UI_OFFSET = 13.4  # demo2: ui_time = outside_time + 13.4 s (audio cross-correlation)
 
@@ -52,7 +52,7 @@ SEGS = [
     dict(id="sim_search", src=SIM, s=14.0, e=33.0, speed=2.5, label=L_SIM),
     dict(id="sim_lock", src=SIM, s=33.0, e=40.0, label=L_SIM),
     dict(id="sim_close", src=SIM, s=40.0, e=52.0, speed=2.0, label=L_SIM),
-    dict(id="build", kind="still", src=CONCEPT, dur=11.0, caption="THE HACKATHON BUILD",
+    dict(id="build", kind="still", src=CONCEPT, dur=11.5, caption="THE HACKATHON BUILD",
          sub="Green ball = person in the water  ·  cup of water = the sea  ·  TurboPi = rescue boat"),
     dict(id="ball_up", src=O2, s=0.0, e=3.2, label=L_OUT),
     dict(id="armed", src=UI, s=16.4, e=20.0, label=L_UI),
@@ -81,7 +81,7 @@ VO = [
     ("ball_up", 0.2, "A deck camera watches the rail. Once it sees the person on deck, auto man overboard is armed."),
     ("ball_lost", 0.0, "The ball goes over. The water sensor, standing in for a crew wearable, gets wet."),
     ("wet", 1.2, "Osprey raises man overboard instantly. Nobody has to press a button."),
-    ("map", 1.6, "The drift model starts growing the search area on the map."),
+    ("map", 2.0, "The drift model starts growing the search area on the map."),
     ("drone", 0.6, "A drone launches, and Osprey's detector picks out the green ball in its camera feed."),
     ("candidate", 0.2, "Red decoys are rejected. The operator confirms the sighting with one click."),
     ("rover_out", 0.3, "The rover is dispatched to the drone's fix, and closes in with its own camera."),
