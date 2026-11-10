@@ -204,3 +204,70 @@ def render(path, duration, cues):
     with wave.open(path, "wb") as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
         w.writeframes(pcm.tobytes())
+
+
+def kick(gain=1.0):
+    t = np.arange(int(0.35 * SR)) / SR
+    f = 48 + 110 * np.exp(-t * 30)
+    return gain * np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9)
+
+
+def snare(gain=0.6):
+    t = np.arange(int(0.25 * SR)) / SR
+    n = rng.standard_normal(len(t))
+    n = lowpass(n, 7000) - lowpass(n, 900)
+    tone = np.sin(2 * np.pi * 190 * t) * np.exp(-t * 25)
+    return gain * (n * np.exp(-t * 16) + 0.5 * tone)
+
+
+def braam(notes, length, gain=0.35):
+    t = np.arange(int(length * SR)) / SR
+    sig = np.zeros_like(t)
+    for m in notes:
+        for det in (-0.12, 0.0, 0.1):
+            sig += saw(hz(m + det), t, harmonics=16, bright=0.12)
+    sig = lowpass(sig, 1500)
+    return gain * np.tanh(sig * 1.5) * env_adsr(len(t), 0.02, 0.3, 0.7, 0.4, length - 0.4)
+
+
+def render_hype(path, beats, bpm=150, slams=()):
+    """Hard trailer beat: kick every beat, snare on 2/4, 16th hats, 808 sub, braams on slams."""
+    beat = 60 / bpm
+    duration = beats * beat + 1.2
+    n = int(duration * SR)
+    mono = np.zeros(n); L = np.zeros(n); R = np.zeros(n)
+    add(mono, 0.0, impact(1.0))
+    for b in range(1, beats):
+        t = b * beat
+        add(mono, t, kick(0.9))
+        if b % 2 == 0:
+            add(mono, t, snare(0.55))
+        for k in range(4):
+            add(mono, t + k * beat / 4, tick(0.12 if k % 2 else 0.2))
+        root = [38, 38, 34, 36][(b // 4) % 4]
+        sub_t = np.arange(int(beat * SR)) / SR
+        sub = np.sin(2 * np.pi * hz(root - 12) * sub_t) * np.exp(-sub_t * 3.5) * 0.5
+        add(mono, t, sub)
+        if b >= beats - 4:  # snare roll into the end slam
+            for k in range(4):
+                add(mono, t + k * beat / 4, snare(0.3 + 0.1 * k))
+    for s in slams:
+        bb = braam([38, 45, 50, 53], 1.4)
+        add(L, s * beat, bb); add(R, s * beat, bb * 0.95)
+        add(mono, s * beat, impact(0.7))
+    end = beats * beat
+    add(mono, end - 1.0, riser(1.0, 0.35))
+    add(mono, end, impact(1.2))
+    bb = braam([38, 45, 50, 54, 57], 1.6, 0.45)
+    add(L, end, bb); add(R, end, bb)
+    L += mono; R += mono
+    st = np.stack([L, R], 1)
+    st /= np.max(np.abs(st)) + 1e-9
+    st = np.tanh(st * 2.2) / np.tanh(2.2)
+    tf = np.arange(len(st)) / SR
+    st *= np.clip((duration - tf) / 0.8, 0, 1)[:, None]
+    pcm = (st * 0.9 * 32767).astype(np.int16)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+    return duration
