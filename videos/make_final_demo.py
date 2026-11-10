@@ -86,7 +86,6 @@ VO = [
     ("candidate", 0.2, "Red decoys are rejected. The operator confirms the sighting with one click."),
     ("rover_out", 0.3, "The rover is dispatched to the drone's fix, and closes in with its own camera."),
     ("celebrate", 0.2, "Target reached."),
-    ("outro", 0.6, "Osprey. Find them. Follow them. Bring them home."),
 ]
 
 
