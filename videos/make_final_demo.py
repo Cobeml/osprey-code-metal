@@ -1,7 +1,7 @@
 """Build the final Osprey demo video: concept simulation, then the live hardware demo,
 with a synthesized voice-over and an original background score.
 
-    .venv/bin/python videos/make_final_demo.py   # -> osprey-final-demo.mp4 (+ -web.mp4)
+    .venv/bin/python videos/make_final_demo.py   # -> osprey-final-demo.mp4 (+ -web.mp4, -720p.mp4)
 
 Opens cold with osprey-hype.mp4 minus its end card (run make_hype.py first).
 
@@ -249,6 +249,10 @@ def main():
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(OUT)])
     run(["ffmpeg", "-v", "error", "-y", "-i", str(OUT), "-c:v", "libx264", "-preset", "medium", "-crf", "22",
          "-pix_fmt", "yuv420p", "-g", str(FPS * 2), "-c:a", "copy", "-movflags", "+faststart", str(WEB)])
+    # light preview copy (34 MB) for players that stutter on the 1080p file
+    run(["ffmpeg", "-v", "error", "-y", "-i", str(OUT), "-vf", "scale=1280:720:flags=lanczos", "-c:v", "libx264",
+         "-preset", "medium", "-crf", "23", "-profile:v", "main", "-level", "3.1", "-pix_fmt", "yuv420p", "-g", str(FPS * 2),
+         "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(HERE / "osprey-final-demo-720p.mp4")])
     print(f"\nwrote {OUT.name} + {WEB.name}: {cold + total:.1f} s ({cold:.1f} s cold open)")
     for sg in SEGS:
         print(f"  {cold + sg['t0']:6.1f}  {sg['id']}")
