@@ -184,8 +184,8 @@ def main():
                        + ",fade=t=in:st=0:d=0.8")
         elif kind == "still":
             i = inp(HERE / sg["src"], "-loop", "1", "-t", f"{sg['d']:.3f}", "-framerate", str(FPS))
-            ch = (f"[{i}:v]scale=2400:-2,zoompan=z='1+0.0006*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-                  f":d={int(sg['d']*FPS)}:s={W}x{H}:fps={FPS},{norm},"
+            ch = (f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,"
+                  f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=white,{norm},"
                   f"drawbox=x=0:y=ih-200:w=iw:h=200:color=black@0.7:t=fill,"
                   + text(sg["caption"], 54, "h-180", color="0xffc23d") + ","
                   + text(sg["sub"], 32, "h-104", FONT_REG)

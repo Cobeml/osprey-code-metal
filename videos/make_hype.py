@@ -1,4 +1,4 @@
-"""Sub-10-second hype edit: project highlights cut on the beat with public-domain
+"""Sub-10-second hype edit: project highlights cut on the beat and half-beat with public-domain
 U.S. Navy / USCG footage.
 
     .venv/bin/python videos/make_hype.py      # -> videos/osprey-hype.mp4
@@ -35,26 +35,43 @@ USCG_CROP = (1080, 608, 0, 656)
 STOCK_TAG = "U.S. NAVY / USCG FOOTAGE"
 SIM_TAG = "CONCEPT SIM"
 
-# (src, start, beats, speed, crop, text, flash, tag)
+# (src, start, beats, speed, crop, text, flash, tag); beats may be 0.5 (one 0.2 s cut)
+HB = 0.5
 SHOTS = [
-    (UI, 28.6, 2, 1.0, (1600, 900, 0, 0), "MAN OVERBOARD", True, None),
-    (JET, 27.95, 1, 1.0, None, None, True, STOCK_TAG),
-    (O1, 25.7, 1, 1.0, None, None, False, None),
-    (UI, 26.25, 1, 1.0, (960, 540, 1920, 0), None, True, None),
-    (USCG, 0.5, 1, 1.0, USCG_CROP, None, False, STOCK_TAG),
-    (SIM, 6.0, 1, 2.0, None, None, False, SIM_TAG),
-    (UI, 30.0, 1, 4.0, (1080, 608, 0, 500), None, False, None),
-    (BOATS, 14.2, 1, 1.5, None, None, True, STOCK_TAG),
-    (DRONE, 1.8, 1, 1.0, None, None, False, None),
-    (DRONE, 4.2, 1, 1.5, None, None, False, None),
+    (UI, 28.6, 1.5, 1.0, (1600, 900, 0, 0), "MAN OVERBOARD", True, None),
+    (JET, 27.95, HB, 1.0, None, None, True, STOCK_TAG),
+    (JET, 19.4, HB, 1.0, None, None, False, STOCK_TAG),
+    (O1, 25.7, HB, 1.0, None, None, False, None),
+    (UI, 26.25, HB, 1.0, (960, 540, 1920, 0), None, True, None),
+    (USCG, 0.5, HB, 1.0, USCG_CROP, None, False, STOCK_TAG),
+    (USCG, 2.3, HB, 1.0, USCG_CROP, None, False, STOCK_TAG),
+    (SIM, 6.0, HB, 2.0, None, None, False, SIM_TAG),
+    (UI, 30.0, HB, 4.0, (1080, 608, 0, 500), None, False, None),
+    (SIM, 20.0, HB, 2.0, None, None, False, SIM_TAG),
+    (BOATS, 14.2, HB, 1.5, None, None, True, STOCK_TAG),
+    (JET, 22.2, HB, 1.0, None, None, False, STOCK_TAG),
+    (USCG, 3.2, HB, 1.0, USCG_CROP, None, False, STOCK_TAG),
+    (DRONE, 1.8, HB, 1.0, None, None, True, None),
+    (DRONE, 4.2, HB, 1.5, None, None, False, None),
+    (DRONE, 7.0, HB, 1.0, None, None, False, None),
     (USCG, 8.3, 1, 1.0, USCG_CROP, "FIND.", True, STOCK_TAG),
-    (DRONE, 11.2, 1, 1.0, None, None, False, None),
-    (UI, 53.6, 1, 1.0, UI_MODAL, None, True, None),
-    (SIM, 33.5, 1, 2.0, None, None, False, SIM_TAG),
+    (DRONE, 11.2, HB, 1.0, None, None, False, None),
+    (BOATS, 7.0, HB, 1.0, None, None, False, STOCK_TAG),
+    (USCG, 11.3, HB, 1.0, USCG_CROP, None, False, STOCK_TAG),
+    (UI, 53.6, HB, 1.0, UI_MODAL, None, True, None),
+    (DRONE, 13.8, HB, 1.0, None, None, False, None),
+    (SIM, 33.5, HB, 2.0, None, None, False, SIM_TAG),
+    (DRONE, 9.3, HB, 1.0, None, None, False, None),
     (USCG, 14.8, 1, 1.0, USCG_CROP, "FOLLOW.", True, STOCK_TAG),
-    (O2, 57.3, 1, 1.5, None, None, False, None),
-    (UI, 93.0, 1, 1.0, UI_MODAL, None, True, None),
-    (SIM, 46.0, 1, 1.0, None, None, False, SIM_TAG),
+    (O2, 61.5, HB, 1.0, None, None, False, None),
+    (BOATS, 18.5, HB, 1.0, None, None, False, STOCK_TAG),
+    (JET, 5.5, HB, 1.0, None, None, False, STOCK_TAG),
+    (UI, 93.0, HB, 1.0, UI_MODAL, None, True, None),
+    (SIM, 46.0, HB, 1.0, None, None, False, SIM_TAG),
+    (SIM, 40.0, HB, 1.0, None, None, False, SIM_TAG),
+    (JET, 29.2, HB, 1.0, None, None, False, STOCK_TAG),
+    (O2, 79.0, HB, 1.0, None, None, False, None),
+    (O2, 81.0, HB, 1.0, None, None, False, None),
     (CELEB, 1.4, 2, 1.0, None, "BRING THEM HOME.", True, None),
 ]
 
@@ -66,6 +83,8 @@ def esc(t):
 def main():
     WORK.mkdir(exist_ok=True)
     beats = sum(s[2] for s in SHOTS)
+    assert beats == int(beats), beats
+    beats = int(beats)
     slams = [b for b, s in zip(__import__("itertools").accumulate([0] + [s[2] for s in SHOTS]), SHOTS) if s[5]]
     total = beats * BEAT + END_CARD
     assert total < 10, total
@@ -83,9 +102,10 @@ def main():
             cw, chh, cx, cy = crop
             ch += f",crop={cw}:{chh}:{cx}:{cy}"
         ch += f",scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},setsar=1"
-        # punch-in + shake
-        ch += (f",zoompan=z='1.04+0.010*on':x='iw/2-iw/zoom/2+10*sin(on*2.3)':y='ih/2-ih/zoom/2+7*cos(on*1.9)'"
-               f":d=1:s={W}x{H}:fps={FPS},{grade},format=yuv420p")
+        # no camera motion: alternate full frame and a static 8% punch-in for rhythm
+        if k % 2:
+            ch += f",crop=iw*0.92:ih*0.92,scale={W}:{H}:flags=lanczos,setsar=1"
+        ch += f",{grade},format=yuv420p"
         if tag:
             ch += (f",drawtext=fontfile='{FONT_B}':text='{esc(tag)}':x=w-text_w-36:y=h-56:fontsize=22"
                    f":fontcolor=white@0.75:box=1:boxcolor=black@0.4:boxborderw=6")
@@ -93,7 +113,8 @@ def main():
             ch += (f",drawtext=fontfile='{FONT}':text='{esc(txt)}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=150"
                    f":fontcolor=white:borderw=6:bordercolor=black@0.85:shadowx=8:shadowy=8:shadowcolor=black@0.6")
         if flash:
-            ch += ",drawbox=x=0:y=0:w=iw:h=ih:color=white@0.85:t=fill:enable='lt(t,0.067)'"
+            fl = 0.067 if nb >= 1 else 0.034   # one flash frame on the 0.2 s cuts
+            ch += f",drawbox=x=0:y=0:w=iw:h=ih:color=white@0.85:t=fill:enable='lt(t,{fl})'"
         ch += f",trim=duration={d:.4f},setpts=PTS-STARTPTS[v{k}]"
         parts.append(ch)
         labels.append(f"[v{k}]")
