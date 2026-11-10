@@ -13,7 +13,7 @@ Inputs (all in videos/):
   drone-intercut.mp4     drone test flight: outside / FPV with the ball detector overlay
   celebration_outside.MOV
   ../docs/media/osprey-operational-concept.png
-Voice-over: macOS `say` (Daniel). Music: music.py (synthesized, no samples).
+Voice-over: Kokoro-82M via tts.py (local). Music: music.py (synthesized, no samples).
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import music  # noqa: E402
+import tts  # noqa: E402
 
 WORK = HERE / "_final_build"
 OUT = HERE / "osprey-final-demo.mp4"
@@ -31,7 +32,7 @@ WEB = HERE / "osprey-final-demo-web.mp4"
 COLD_OPEN = HERE / "osprey-hype.mp4"   # make_hype.py; 9.6 s cold open ahead of the main cut
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REG = "/System/Library/Fonts/Supplemental/Arial.ttf"
-VOICE, RATE = "Daniel", 168
+VOICE, SPEED = "am_fenrir", 1.12   # Kokoro voice (tts.py)
 W, H, FPS = 1920, 1080, 30
 UI_OFFSET = 13.4  # demo2: ui_time = outside_time + 13.4 s (audio cross-correlation)
 
@@ -51,7 +52,7 @@ SEGS = [
     dict(id="sim_search", src=SIM, s=14.0, e=33.0, speed=2.5, label=L_SIM),
     dict(id="sim_lock", src=SIM, s=33.0, e=40.0, label=L_SIM),
     dict(id="sim_close", src=SIM, s=40.0, e=52.0, speed=2.0, label=L_SIM),
-    dict(id="build", kind="still", src=CONCEPT, dur=7.6, caption="THE HACKATHON BUILD",
+    dict(id="build", kind="still", src=CONCEPT, dur=11.0, caption="THE HACKATHON BUILD",
          sub="Green ball = person in the water  ·  cup of water = the sea  ·  TurboPi = rescue boat"),
     dict(id="ball_up", src=O2, s=0.0, e=3.2, label=L_OUT),
     dict(id="armed", src=UI, s=16.4, e=20.0, label=L_UI),
@@ -76,9 +77,9 @@ VO = [
     ("sim_intro", 0.8, "When someone goes overboard, every minute counts. The first problem is simply finding them."),
     ("sim_intro", 7.0, "Osprey turns a man overboard alarm into a coordinated search. It predicts where wind and current will carry the person, and launches drones and a rescue boat to cover that area."),
     ("sim_lock", 0.3, "When a drone spots them, the swarm locks on and keeps them in sight, while the rescue boat is guided straight in."),
-    ("build", 0.3, "For the hackathon, we built it for real. A green ball plays the person in the water. A cup of water plays the sea."),
-    ("ball_up", 0.3, "A deck camera watches the rail. Once it sees the person on deck, automatic man overboard is armed."),
-    ("ball_over", 0.2, "The ball goes over. The camera loses it, and the water sensor gets wet."),
+    ("build", 0.3, "For the hackathon, we built it for real. A green ball plays the person, and a cup of water plays the sea. The sensor loadout is modular, configured for each vessel and mission."),
+    ("ball_up", 0.2, "A deck camera watches the rail. Once it sees the person on deck, auto man overboard is armed."),
+    ("ball_lost", 0.0, "The ball goes over. The water sensor, standing in for a crew wearable, gets wet."),
     ("wet", 1.2, "Osprey raises man overboard instantly. Nobody has to press a button."),
     ("map", 1.6, "The drift model starts growing the search area on the map."),
     ("drone", 0.6, "A drone launches, and Osprey's detector picks out the green ball in its camera feed."),
@@ -132,11 +133,13 @@ def main():
     vo = []
     for i, (sid, off, line) in enumerate(VO):
         wav = WORK / f"vo{i:02d}.wav"
-        if not wav.exists() or (WORK / f"vo{i:02d}.txt").read_text() != line if (WORK / f"vo{i:02d}.txt").exists() else True:
-            aiff = WORK / f"vo{i:02d}.aiff"
-            run(["say", "-v", VOICE, "-r", str(RATE), "-o", str(aiff), line])
-            run(["ffmpeg", "-v", "error", "-y", "-i", str(aiff), "-ar", "48000", "-ac", "1", str(wav)])
-            (WORK / f"vo{i:02d}.txt").write_text(line)
+        key = WORK / f"vo{i:02d}.txt"
+        stamp = f"{VOICE}|{SPEED}|{line}"
+        if not wav.exists() or not key.exists() or key.read_text() != stamp:
+            raw = WORK / f"vo{i:02d}_raw.wav"
+            tts.synth(line, str(raw), VOICE, SPEED)
+            run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-ar", "48000", "-ac", "1", str(wav)])
+            key.write_text(stamp)
         start = at[sid]["t0"] + off
         vo.append((start, dur(wav), wav, line))
     for (a, da, _, la), (b, _, _, lb) in zip(vo, vo[1:]):
