@@ -1,7 +1,9 @@
 """Build the final Osprey demo video: concept simulation, then the live hardware demo,
 with a synthesized voice-over and an original background score.
 
-    .venv/bin/python videos/make_final_demo.py            # -> videos/osprey-final-demo.mp4
+    .venv/bin/python videos/make_final_demo.py   # -> osprey-final-demo.mp4 (+ -web.mp4)
+
+Opens cold with osprey-hype.mp4 minus its end card (run make_hype.py first).
 
 Inputs (all in videos/):
   sim_capture.mp4        3D mission simulation, recorded headless by capture_sim.mjs
@@ -25,6 +27,8 @@ import music  # noqa: E402
 
 WORK = HERE / "_final_build"
 OUT = HERE / "osprey-final-demo.mp4"
+WEB = HERE / "osprey-final-demo-web.mp4"
+COLD_OPEN = HERE / "osprey-hype.mp4"   # make_hype.py; 9.6 s cold open ahead of the main cut
 FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REG = "/System/Library/Fonts/Supplemental/Arial.ttf"
 VOICE, RATE = "Daniel", 168
@@ -192,13 +196,15 @@ def main():
                   + text("OSPREY", 150, "(h/2)-190", extra=":alpha='min(1,t/0.8)'") + ","
                   + text("Find. Follow. Bring them home.", 56, "(h/2)", color="0x6fe0d0", extra=":alpha='min(1,max(0,(t-0.6)/0.8))'") + ","
                   + text("Team 29  ·  CodeMetal Forge 2026", 34, "(h/2)+110", FONT_REG, color="white@0.8",
-                         extra=":alpha='min(1,max(0,(t-1.2)/0.8))'")
+                         extra=":alpha='min(1,max(0,(t-1.2)/0.8))'") + ","
+                  + text("Opening includes public-domain U.S. Navy and USCG footage", 24, "h-70", FONT_REG,
+                         color="white@0.55", extra=":alpha='min(1,max(0,(t-1.2)/0.8))'")
                   + f",fade=t=out:st={sg['d']-1.2:.3f}:d=1.2")
         # trim to the exact planned length so audio cues stay in sync
         ch += f",trim=duration={sg['d']:.4f},setpts=PTS-STARTPTS[v{k}]"
         fparts.append(ch)
         vlabels.append(f"[v{k}]")
-    fparts.append("".join(vlabels) + f"concat=n={len(SEGS)}:v=1:a=0[vout]")
+    fparts.append("".join(vlabels) + f"concat=n={len(SEGS)}:v=1:a=0[vmain]")
 
     # --- audio graph: music (ducked under VO), VO, celebration audio
     mi = inp(mus)
@@ -219,7 +225,18 @@ def main():
     fparts.append(f"[{ci}:a:0]atrim=0:{cel['d']:.3f},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo,"
                   f"volume={cel['audio']},afade=t=in:d=0.2,afade=t=out:st={cel['d']-0.6:.3f}:d=0.6,adelay={cms}|{cms}[cel]")
     fparts.append(f"[vomix][musduck][cel]amix=inputs=3:normalize=0,atrim=0:{total:.3f},"
-                  f"loudnorm=I=-16:TP=-1.5:LRA=11[aout]")
+                  f"loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[amain]")
+    # cold open: the hype edit without its end card, so its final slam lands on the OSPREY title;
+    # its audio runs full length and the end hit rings out under the start of the main cut
+    import make_hype
+    cold = sum(sh[2] for sh in make_hype.SHOTS) * make_hype.BEAT
+    hi = inp(COLD_OPEN)
+    cms0 = int(cold * 1000)
+    fparts.append(f"[{hi}:v]trim=duration={cold:.4f},setpts=PTS-STARTPTS,{norm}[hv]")
+    fparts.append(f"[{hi}:a]aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,volume=-2dB,apad[ha]")
+    fparts.append(f"[amain]adelay={cms0}|{cms0}[amd]")
+    fparts.append(f"[hv][vmain]concat=n=2:v=1:a=0[vout]")
+    fparts.append(f"[ha][amd]amix=inputs=2:normalize=0:duration=shortest,atrim=0:{cold + total:.3f}[aout]")
 
     graph = WORK / "graph.txt"
     graph.write_text(";\n".join(fparts))
@@ -227,9 +244,11 @@ def main():
          "-map", "[vout]", "-map", "[aout]", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
          "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(FPS), "-g", str(FPS * 2),
          "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(OUT)])
-    print(f"\nwrote {OUT.name}: {total:.1f} s")
+    run(["ffmpeg", "-v", "error", "-y", "-i", str(OUT), "-c:v", "libx264", "-preset", "medium", "-crf", "22",
+         "-pix_fmt", "yuv420p", "-g", str(FPS * 2), "-c:a", "copy", "-movflags", "+faststart", str(WEB)])
+    print(f"\nwrote {OUT.name} + {WEB.name}: {cold + total:.1f} s ({cold:.1f} s cold open)")
     for sg in SEGS:
-        print(f"  {sg['t0']:6.1f}  {sg['id']}")
+        print(f"  {cold + sg['t0']:6.1f}  {sg['id']}")
 
 
 if __name__ == "__main__":
