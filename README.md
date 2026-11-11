@@ -4,11 +4,11 @@ Team 29, CodeMetal Forge 2026.
 
 **Landing page:** [`index.html`](index.html) runs the 3D mission simulation in the page, with the recorded Osprey MOB Coordinator run below it. Serve the repo root to view it locally: `python3 -m http.server 8088 --bind 127.0.0.1`, then open `http://127.0.0.1:8088/`.
 
-### Demo video (real hardware run)
+### Demo video
 
-[![Osprey demo: the drone feed flags the green ball as the candidate and rejects the red decoy (click for the 88 s video with sound)](docs/media/osprey-demo.jpg)](https://drive.google.com/file/d/1qYAAouRkvffP3kz8eknNH4pTXRxTkwrf/view?usp=sharing)
+[![Osprey demo: the drone feed flags the green ball as the candidate and rejects the red decoy (click for the 2 min video with sound)](docs/media/osprey-demo.jpg)](https://drive.google.com/file/d/1kaGOMbzxMHWoPhPZ3DuscZ_X7Gpl7g0f/view?usp=sharing)
 
-Click the still to watch the demo with sound [on Google Drive](https://drive.google.com/file/d/1qYAAouRkvffP3kz8eknNH4pTXRxTkwrf/view?usp=sharing). The deck camera arms on the green ball (the stand-in for a person in the water). When the ball goes over, the coordinator opens a man-overboard incident and shows the drift search area. The drone feed then flags the green ball and ignores the red decoys, and the rover drives to it.
+Click the still to watch the final demo with sound [on Google Drive](https://drive.google.com/file/d/1kaGOMbzxMHWoPhPZ3DuscZ_X7Gpl7g0f/view?usp=sharing). It runs about 2 minutes, with narration. It opens with a short highlight cut that includes public-domain U.S. Navy and USCG footage. Next comes the 3D mission simulation (concept, scripted sightings), then the real hardware run. In the hardware run, the deck camera arms on the green ball, the stand-in for a person in the water. The water sensor stands in for a crew wearable. When the ball goes over, the sensor reads wet and the coordinator opens a man-overboard incident and shows the growing drift search area. The drone feed then flags the green ball and ignores the red decoys, and the rover drives to it. Local copies: [`videos/osprey-final-demo-web.mp4`](videos/osprey-final-demo-web.mp4) (1080p) and [`videos/osprey-final-demo-720p.mp4`](videos/osprey-final-demo-720p.mp4).
 
 ### Mission simulation (concept)
 
