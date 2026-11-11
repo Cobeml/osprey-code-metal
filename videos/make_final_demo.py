@@ -196,7 +196,7 @@ def main():
             i = inp(f"color=c=0x0b1220:s={W}x{H}:r={FPS}:d={sg['d']:.3f}", "-f", "lavfi")
             ch = (f"[{i}:v]{norm},"
                   + text("OSPREY", 150, "(h/2)-190", extra=":alpha='min(1,t/0.8)'") + ","
-                  + text("Find. Follow. Bring them home.", 56, "(h/2)", color="0x6fe0d0", extra=":alpha='min(1,max(0,(t-0.6)/0.8))'") + ","
+                  + text("Find. Follow. Rescue.", 56, "(h/2)", color="0x6fe0d0", extra=":alpha='min(1,max(0,(t-0.6)/0.8))'") + ","
                   + text("Team 29  ·  CodeMetal Forge 2026", 34, "(h/2)+110", FONT_REG, color="white@0.8",
                          extra=":alpha='min(1,max(0,(t-1.2)/0.8))'") + ","
                   + text("Opening includes public-domain U.S. Navy and USCG footage", 24, "h-70", FONT_REG,

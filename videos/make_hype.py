@@ -72,7 +72,7 @@ SHOTS = [
     (JET, 29.2, HB, 1.0, None, None, False, STOCK_TAG),
     (O2, 79.0, HB, 1.0, None, None, False, None),
     (O2, 81.0, HB, 1.0, None, None, False, None),
-    (CELEB, 1.4, 2, 1.0, None, "BRING THEM HOME.", True, None),
+    (CELEB, 1.4, 2, 1.0, None, "RESCUE.", True, None),
 ]
 
 
